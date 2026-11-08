@@ -3,6 +3,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import "./App.css";
 
+const produtoVazio = {
+  nome: "",
+  descricao: "",
+  categoria: "Aplicativos",
+  plataforma: "Windows",
+  icone: "📦",
+  link: "",
+  imagem: ""
+};
+
 export default function App() {
   const [produtos, setProdutos] = useState([]);
   const [admin, setAdmin] = useState(false);
@@ -13,16 +23,9 @@ export default function App() {
   const [pesquisa, setPesquisa] = useState("");
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
   const [mensagem, setMensagem] = useState("");
-
-  const [novo, setNovo] = useState({
-    nome: "",
-    descricao: "",
-    categoria: "Aplicativos",
-    plataforma: "Windows",
-    icone: "📦",
-    link: "",
-    imagem: ""
-  });
+  const [editandoId, setEditandoId] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [novo, setNovo] = useState(produtoVazio);
 
   async function carregarProdutos() {
     const { data, error } = await supabase
@@ -31,11 +34,11 @@ export default function App() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMensagem("Erro ao carregar downloads: " + error.message);
+      setMensagem("Erro ao carregar: " + error.message);
       return;
     }
 
-    setProdutos(data.map((item) => ({
+    setProdutos((data || []).map((item) => ({
       id: item.id,
       nome: item.title,
       descricao: item.description || "",
@@ -53,11 +56,12 @@ export default function App() {
     async function iniciar() {
       const { data } = await supabase.auth.getSession();
 
-      if (ativo) {
-        setSession(data.session);
-        await carregarProdutos();
-        setCarregando(false);
-      }
+      if (!ativo) return;
+
+      setSession(data.session);
+      await carregarProdutos();
+
+      if (ativo) setCarregando(false);
     }
 
     iniciar();
@@ -86,58 +90,106 @@ export default function App() {
     if (error) {
       setMensagem("Não foi possível entrar. Confira o e-mail e a senha.");
     } else {
-      setMensagem("Login realizado!");
+      setMensagem("Login realizado com sucesso!");
       setSenha("");
     }
   }
 
   async function sair() {
     await supabase.auth.signOut();
-    setAdmin(false);
+    setSession(null);
+    cancelarEdicao();
     setMensagem("Você saiu do painel.");
   }
 
-  async function adicionar(e) {
-    e.preventDefault();
+  function atualizarCampo(campo, valor) {
+    setNovo((atual) => ({
+      ...atual,
+      [campo]: valor
+    }));
+  }
 
-    if (!session) {
-      setMensagem("Entre como administrador primeiro.");
-      return;
-    }
-
-    const { error } = await supabase.from("downloads").insert([{
-      title: novo.nome,
-      description: novo.descricao,
-      category: novo.categoria,
-      platform: novo.plataforma,
-      icon: novo.icone,
-      download_url: novo.link,
-      image_url: novo.imagem || null
-    }]);
-
-    if (error) {
-      setMensagem("Erro ao cadastrar: " + error.message);
-      return;
-    }
+  function iniciarEdicao(produto) {
+    setEditandoId(produto.id);
 
     setNovo({
-      nome: "",
-      descricao: "",
-      categoria: "Aplicativos",
-      plataforma: "Windows",
-      icone: "📦",
-      link: "",
-      imagem: ""
+      nome: produto.nome,
+      descricao: produto.descricao,
+      categoria: produto.categoria,
+      plataforma: produto.plataforma,
+      icone: produto.icone,
+      link: produto.link,
+      imagem: produto.imagem
     });
 
-    setMensagem("Download cadastrado com sucesso!");
+    setMensagem("Editando: " + produto.nome);
+
+    document.querySelector(".painel-admin")?.scrollIntoView({
+      behavior: "smooth"
+    });
+  }
+
+  function cancelarEdicao() {
+    setEditandoId(null);
+    setNovo({ ...produtoVazio });
+  }
+
+  async function salvarProduto(e) {
+    e.preventDefault();
+
+    if (!session || salvando) return;
+
+    setSalvando(true);
+    setMensagem("Salvando...");
+
+    const dados = {
+      title: novo.nome.trim(),
+      description: novo.descricao.trim(),
+      category: novo.categoria,
+      platform: novo.plataforma.trim() || "Windows",
+      icon: novo.icone.trim() || "📦",
+      download_url: novo.link.trim(),
+      image_url: novo.imagem.trim() || null
+    };
+
+    let resultado;
+
+    if (editandoId) {
+      resultado = await supabase
+        .from("downloads")
+        .update(dados)
+        .eq("id", editandoId);
+    } else {
+      resultado = await supabase
+        .from("downloads")
+        .insert([dados]);
+    }
+
+    setSalvando(false);
+
+    if (resultado.error) {
+      setMensagem("Erro ao salvar: " + resultado.error.message);
+      return;
+    }
+
+    setMensagem(
+      editandoId
+        ? "Download atualizado com sucesso!"
+        : "Download cadastrado com sucesso!"
+    );
+
+    cancelarEdicao();
     await carregarProdutos();
   }
 
   async function excluir(id) {
     if (!session) return;
 
-    if (!window.confirm("Deseja realmente excluir este download?")) return;
+    const confirmar = window.confirm(
+      "Deseja realmente excluir este download?"
+    );
+
+    if (!confirmar) return;
 
     const { error } = await supabase
       .from("downloads")
@@ -149,7 +201,9 @@ export default function App() {
       return;
     }
 
-    setMensagem("Download excluído!");
+    if (editandoId === id) cancelarEdicao();
+
+    setMensagem("Download excluído com sucesso!");
     await carregarProdutos();
   }
 
@@ -159,18 +213,25 @@ export default function App() {
   ];
 
   const filtrados = produtos.filter((p) => {
+    const termo = pesquisa.toLowerCase();
+
     const correspondePesquisa =
-      p.nome.toLowerCase().includes(pesquisa.toLowerCase()) ||
-      p.descricao.toLowerCase().includes(pesquisa.toLowerCase());
+      p.nome.toLowerCase().includes(termo) ||
+      p.descricao.toLowerCase().includes(termo);
 
     const correspondeCategoria =
-      categoriaAtiva === "Todos" || p.categoria === categoriaAtiva;
+      categoriaAtiva === "Todos" ||
+      p.categoria === categoriaAtiva;
 
     return correspondePesquisa && correspondeCategoria;
   });
 
   if (carregando) {
-    return <div className="site"><h2>Carregando MANINHO DOWNLOADS...</h2></div>;
+    return (
+      <div className="site">
+        <h2>Carregando MANINHO DOWNLOADS...</h2>
+      </div>
+    );
   }
 
   return (
@@ -193,12 +254,17 @@ export default function App() {
         <div className="hero-texto">
           <span className="etiqueta">SEU PORTAL DE DOWNLOADS</span>
           <h1>MANINHO DOWNLOADS</h1>
-          <p>Seus aplicativos, programas e jogos favoritos em um só lugar.</p>
+          <p>
+            Seus aplicativos, programas e jogos favoritos
+            em um só lugar.
+          </p>
         </div>
 
         <div className="hero-arte">
           <div className="circulo">🎮</div>
-          <p className="arte-legenda">DOWNLOADS • JOGOS • PROGRAMAS</p>
+          <p className="arte-legenda">
+            DOWNLOADS • JOGOS • PROGRAMAS
+          </p>
         </div>
       </section>
 
@@ -210,7 +276,9 @@ export default function App() {
 
       {admin && (
         <section className="painel-admin">
-          <h2 className="subtitulo">🔐 Painel administrativo</h2>
+          <h2 className="subtitulo">
+            🔐 Painel administrativo
+          </h2>
 
           {!session ? (
             <form className="login-form" onSubmit={entrar}>
@@ -237,29 +305,37 @@ export default function App() {
           ) : (
             <>
               <div className="admin-cabecalho">
-                <p>Administrador conectado: {session.user.email}</p>
-                <button type="button" onClick={sair}>Sair</button>
+                <p>
+                  Administrador conectado: {session.user.email}
+                </p>
+                <button type="button" onClick={sair}>
+                  Sair
+                </button>
               </div>
 
-              <h3>Adicionar novo download</h3>
+              <h3>
+                {editandoId
+                  ? "✏️ Editar download"
+                  : "➕ Adicionar novo download"}
+              </h3>
 
-              <form className="form-produto" onSubmit={adicionar}>
+              <form className="form-produto" onSubmit={salvarProduto}>
                 <input
                   placeholder="Nome do arquivo"
                   value={novo.nome}
-                  onChange={(e) => setNovo({...novo, nome: e.target.value})}
+                  onChange={(e) => atualizarCampo("nome", e.target.value)}
                   required
                 />
 
                 <input
                   placeholder="Descrição"
                   value={novo.descricao}
-                  onChange={(e) => setNovo({...novo, descricao: e.target.value})}
+                  onChange={(e) => atualizarCampo("descricao", e.target.value)}
                 />
 
                 <select
                   value={novo.categoria}
-                  onChange={(e) => setNovo({...novo, categoria: e.target.value})}
+                  onChange={(e) => atualizarCampo("categoria", e.target.value)}
                 >
                   <option>Aplicativos</option>
                   <option>Programas</option>
@@ -271,20 +347,20 @@ export default function App() {
                 <input
                   placeholder="Plataforma (Windows, Android...)"
                   value={novo.plataforma}
-                  onChange={(e) => setNovo({...novo, plataforma: e.target.value})}
+                  onChange={(e) => atualizarCampo("plataforma", e.target.value)}
                 />
 
                 <input
                   placeholder="Ícone ou emoji"
                   value={novo.icone}
-                  onChange={(e) => setNovo({...novo, icone: e.target.value})}
+                  onChange={(e) => atualizarCampo("icone", e.target.value)}
                 />
 
                 <input
                   type="url"
                   placeholder="Link para baixar"
                   value={novo.link}
-                  onChange={(e) => setNovo({...novo, link: e.target.value})}
+                  onChange={(e) => atualizarCampo("link", e.target.value)}
                   required
                 />
 
@@ -292,10 +368,22 @@ export default function App() {
                   type="url"
                   placeholder="Link da imagem (opcional)"
                   value={novo.imagem}
-                  onChange={(e) => setNovo({...novo, imagem: e.target.value})}
+                  onChange={(e) => atualizarCampo("imagem", e.target.value)}
                 />
 
-                <button type="submit">➕ Adicionar download</button>
+                <button type="submit" disabled={salvando}>
+                  {salvando
+                    ? "Salvando..."
+                    : editandoId
+                    ? "💾 Salvar alterações"
+                    : "➕ Adicionar download"}
+                </button>
+
+                {editandoId && (
+                  <button type="button" onClick={cancelarEdicao}>
+                    Cancelar edição
+                  </button>
+                )}
               </form>
 
               <h3>Gerenciar downloads</h3>
@@ -304,20 +392,42 @@ export default function App() {
                 {produtos.map((p) => (
                   <div className="admin-item" key={p.id}>
                     <span>{p.icone} {p.nome}</span>
-                    <button onClick={() => excluir(p.id)}>Excluir</button>
+
+                    <div className="admin-acoes">
+                      <button
+                        className="botao-editar"
+                        type="button"
+                        onClick={() => iniciarEdicao(p)}
+                      >
+                        ✏️ Editar
+                      </button>
+
+                      <button
+                        className="botao-excluir"
+                        type="button"
+                        onClick={() => excluir(p.id)}
+                      >
+                        🗑️ Excluir
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </>
           )}
 
-          {mensagem && <p className="aviso-admin">{mensagem}</p>}
+          {mensagem && (
+            <p className="aviso-admin">{mensagem}</p>
+          )}
         </section>
       )}
 
       <main className="catalogo">
         <h2 className="titulo-secao">Explore nossos downloads</h2>
-        <p className="contador">{filtrados.length} downloads disponíveis</p>
+
+        <p className="contador">
+          {filtrados.length} downloads disponíveis
+        </p>
 
         <input
           className="pesquisa"
@@ -343,7 +453,11 @@ export default function App() {
             <article className="card" key={p.id}>
               <div className="capa">
                 {p.imagem ? (
-                  <img className="capa-imagem" src={p.imagem} alt={p.nome} />
+                  <img
+                    className="capa-imagem"
+                    src={p.imagem}
+                    alt={p.nome}
+                  />
                 ) : (
                   <span className="azul">{p.icone}</span>
                 )}
@@ -353,9 +467,14 @@ export default function App() {
                 <span className="etiqueta">{p.categoria}</span>
                 <h3>{p.nome}</h3>
                 <p>{p.descricao}</p>
+
                 <div className="card-rodape">
                   <span>{p.plataforma}</span>
-                  <a href={p.link} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={p.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Baixar ↗
                   </a>
                 </div>
@@ -370,7 +489,10 @@ export default function App() {
       </main>
 
       <footer className="sobre">
-        <p>© {new Date().getFullYear()} MANINHO DOWNLOADS — Todos os direitos reservados.</p>
+        <p>
+          © {new Date().getFullYear()} MANINHO DOWNLOADS
+          — Todos os direitos reservados.
+        </p>
       </footer>
     </div>
   );
