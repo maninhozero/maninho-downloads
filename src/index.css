@@ -1,0 +1,41 @@
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  display: block;
+  background: #080b13;
+  color: #f4f6ff;
+  font-family: 'Inter', sans-serif;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  text-align: left;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
+
+a {
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+}
