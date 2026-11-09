@@ -341,28 +341,18 @@ export default function App() {
         </button>
       </header>
 
-      <section className="hero">
-        <div className="hero-texto">
-          <span className="etiqueta">
-            SEU PORTAL DE DOWNLOADS
-          </span>
-
-          <h1>MANINHO DOWNLOADS</h1>
-
-          <p>
-            Seus aplicativos, programas e jogos favoritos
-            em um só lugar.
-          </p>
-        </div>
-
-        <div className="hero-arte">
-          <div className="circulo">🎮</div>
-
-          <p className="arte-legenda">
-            DOWNLOADS • JOGOS • PROGRAMAS
-          </p>
-        </div>
-      </section>
+      <section className="banner-principal">
+  <img
+    src={`${import.meta.env.BASE_URL}banner.png`}
+    alt="MANINHO DOWNLOADS"
+    style={{
+      display: "block",
+      width: "100%",
+      height: "auto",
+      borderRadius: "18px"
+    }}
+  />
+</section>
 
       <section className="vantagens">
         <div>⚡ Downloads rápidos</div>
