@@ -223,6 +223,11 @@ button {
   grid-column: span 2;
 }
 
+.form-produto button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .admin-cabecalho {
   display: flex;
   align-items: center;
@@ -244,7 +249,7 @@ button {
   color: white;
 }
 
-/* LISTA DE DOWNLOADS DO ADMIN */
+/* LISTA DE DOWNLOADS */
 
 .admin-lista {
   display: flex;
@@ -310,6 +315,67 @@ button {
   border-radius: 8px;
   background: #102d42;
   color: #65caff;
+}
+
+/* ESCOLHA DE IMAGEM */
+
+.campo-imagem {
+  grid-column: 1 / -1;
+  padding: 18px;
+  border: 1px dashed #00aaff;
+  border-radius: 10px;
+  background: #0b1420;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.campo-imagem label {
+  color: #00aaff;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.campo-imagem input[type="file"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #29445e;
+  border-radius: 8px;
+  background: #101923;
+  color: white;
+}
+
+.campo-imagem small {
+  color: #9fb3c8;
+}
+
+.imagem-preview {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.imagem-preview img {
+  width: 180px;
+  height: 120px;
+  object-fit: cover;
+  border: 2px solid #00aaff;
+  border-radius: 10px;
+}
+
+.imagem-preview button {
+  padding: 10px 15px;
+  border: 1px solid #ff4545;
+  border-radius: 8px;
+  background: #35151b;
+  color: white;
+  cursor: pointer;
+}
+
+.imagem-preview button:hover {
+  background: #66212a;
 }
 
 /* CATÁLOGO */
@@ -541,5 +607,14 @@ button {
 
   .catalogo {
     padding: 12px;
+  }
+
+  .campo-imagem {
+    grid-column: span 1;
+  }
+
+  .imagem-preview img {
+    width: 100%;
+    height: 180px;
   }
 }

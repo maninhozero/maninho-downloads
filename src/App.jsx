@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import "./App.css";
@@ -18,14 +17,19 @@ export default function App() {
   const [admin, setAdmin] = useState(false);
   const [session, setSession] = useState(null);
   const [carregando, setCarregando] = useState(true);
+
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [pesquisa, setPesquisa] = useState("");
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
   const [mensagem, setMensagem] = useState("");
+
   const [editandoId, setEditandoId] = useState(null);
   const [salvando, setSalvando] = useState(false);
-  const [novo, setNovo] = useState(produtoVazio);
+  const [novo, setNovo] = useState({ ...produtoVazio });
+
+  const [imagemArquivo, setImagemArquivo] = useState(null);
+  const [imagemPreview, setImagemPreview] = useState("");
 
   async function carregarProdutos() {
     const { data, error } = await supabase
@@ -34,20 +38,22 @@ export default function App() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMensagem("Erro ao carregar: " + error.message);
+      setMensagem("Erro ao carregar downloads: " + error.message);
       return;
     }
 
-    setProdutos((data || []).map((item) => ({
-      id: item.id,
-      nome: item.title,
-      descricao: item.description || "",
-      categoria: item.category || "Outros",
-      plataforma: item.platform || "Windows",
-      icone: item.icon || "📦",
-      link: item.download_url,
-      imagem: item.image_url || ""
-    })));
+    setProdutos(
+      (data || []).map((item) => ({
+        id: item.id,
+        nome: item.title,
+        descricao: item.description || "",
+        categoria: item.category || "Outros",
+        plataforma: item.platform || "Windows",
+        icone: item.icon || "📦",
+        link: item.download_url,
+        imagem: item.image_url || ""
+      }))
+    );
   }
 
   useEffect(() => {
@@ -61,14 +67,18 @@ export default function App() {
       setSession(data.session);
       await carregarProdutos();
 
-      if (ativo) setCarregando(false);
+      if (ativo) {
+        setCarregando(false);
+      }
     }
 
     iniciar();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, sessionAtual) => {
-        if (ativo) setSession(sessionAtual);
+        if (ativo) {
+          setSession(sessionAtual);
+        }
       }
     );
 
@@ -77,6 +87,15 @@ export default function App() {
       listener.subscription.unsubscribe();
     };
   }, []);
+
+  function limparPreview() {
+    if (imagemPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagemPreview);
+    }
+
+    setImagemPreview("");
+    setImagemArquivo(null);
+  }
 
   async function entrar(e) {
     e.preventDefault();
@@ -97,6 +116,7 @@ export default function App() {
 
   async function sair() {
     await supabase.auth.signOut();
+
     setSession(null);
     cancelarEdicao();
     setMensagem("Você saiu do painel.");
@@ -109,7 +129,35 @@ export default function App() {
     }));
   }
 
+  function escolherImagem(e) {
+    const arquivo = e.target.files?.[0];
+
+    if (!arquivo) return;
+
+    if (!arquivo.type.startsWith("image/")) {
+      setMensagem("Escolha um arquivo de imagem válido.");
+      e.target.value = "";
+      return;
+    }
+
+    if (arquivo.size > 5 * 1024 * 1024) {
+      setMensagem("A imagem deve ter no máximo 5 MB.");
+      e.target.value = "";
+      return;
+    }
+
+    if (imagemPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagemPreview);
+    }
+
+    setImagemArquivo(arquivo);
+    setImagemPreview(URL.createObjectURL(arquivo));
+    setMensagem("Imagem selecionada! Confira a prévia.");
+  }
+
   function iniciarEdicao(produto) {
+    limparPreview();
+
     setEditandoId(produto.id);
 
     setNovo({
@@ -122,6 +170,7 @@ export default function App() {
       imagem: produto.imagem
     });
 
+    setImagemPreview(produto.imagem || "");
     setMensagem("Editando: " + produto.nome);
 
     document.querySelector(".painel-admin")?.scrollIntoView({
@@ -130,8 +179,40 @@ export default function App() {
   }
 
   function cancelarEdicao() {
+    limparPreview();
     setEditandoId(null);
     setNovo({ ...produtoVazio });
+  }
+
+  async function enviarImagem() {
+    if (!imagemArquivo) {
+      return novo.imagem || null;
+    }
+
+    const nomeArquivo = imagemArquivo.name.replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-"
+    );
+
+    const caminho = `downloads/${Date.now()}-${nomeArquivo}`;
+
+    const { error } = await supabase.storage
+      .from("imagens-downloads")
+      .upload(caminho, imagemArquivo, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: imagemArquivo.type
+      });
+
+    if (error) {
+      throw new Error("Erro ao enviar imagem: " + error.message);
+    }
+
+    const { data } = supabase.storage
+      .from("imagens-downloads")
+      .getPublicUrl(caminho);
+
+    return data.publicUrl;
   }
 
   async function salvarProduto(e) {
@@ -140,46 +221,52 @@ export default function App() {
     if (!session || salvando) return;
 
     setSalvando(true);
-    setMensagem("Salvando...");
+    setMensagem("Salvando download e imagem...");
 
-    const dados = {
-      title: novo.nome.trim(),
-      description: novo.descricao.trim(),
-      category: novo.categoria,
-      platform: novo.plataforma.trim() || "Windows",
-      icon: novo.icone.trim() || "📦",
-      download_url: novo.link.trim(),
-      image_url: novo.imagem.trim() || null
-    };
+    try {
+      const urlImagem = await enviarImagem();
 
-    let resultado;
+      const dados = {
+        title: novo.nome.trim(),
+        description: novo.descricao.trim(),
+        category: novo.categoria,
+        platform: novo.plataforma.trim() || "Windows",
+        icon: novo.icone.trim() || "📦",
+        download_url: novo.link.trim(),
+        image_url: urlImagem
+      };
 
-    if (editandoId) {
-      resultado = await supabase
-        .from("downloads")
-        .update(dados)
-        .eq("id", editandoId);
-    } else {
-      resultado = await supabase
-        .from("downloads")
-        .insert([dados]);
+      let resultado;
+
+      if (editandoId) {
+        resultado = await supabase
+          .from("downloads")
+          .update(dados)
+          .eq("id", editandoId);
+      } else {
+        resultado = await supabase
+          .from("downloads")
+          .insert([dados]);
+      }
+
+      if (resultado.error) {
+        throw new Error(resultado.error.message);
+      }
+
+      setMensagem(
+        editandoId
+          ? "Download atualizado com sucesso!"
+          : "Download cadastrado com sucesso!"
+      );
+
+      cancelarEdicao();
+      await carregarProdutos();
+
+    } catch (error) {
+      setMensagem(error.message);
+    } finally {
+      setSalvando(false);
     }
-
-    setSalvando(false);
-
-    if (resultado.error) {
-      setMensagem("Erro ao salvar: " + resultado.error.message);
-      return;
-    }
-
-    setMensagem(
-      editandoId
-        ? "Download atualizado com sucesso!"
-        : "Download cadastrado com sucesso!"
-    );
-
-    cancelarEdicao();
-    await carregarProdutos();
   }
 
   async function excluir(id) {
@@ -201,7 +288,9 @@ export default function App() {
       return;
     }
 
-    if (editandoId === id) cancelarEdicao();
+    if (editandoId === id) {
+      cancelarEdicao();
+    }
 
     setMensagem("Download excluído com sucesso!");
     await carregarProdutos();
@@ -239,7 +328,9 @@ export default function App() {
       <header className="topo">
         <div className="logo">
           <span className="logo-icon">🎮</span>
-          <span>MANINHO <strong>DOWNLOADS</strong></span>
+          <span>
+            MANINHO <strong>DOWNLOADS</strong>
+          </span>
         </div>
 
         <button
@@ -252,8 +343,12 @@ export default function App() {
 
       <section className="hero">
         <div className="hero-texto">
-          <span className="etiqueta">SEU PORTAL DE DOWNLOADS</span>
+          <span className="etiqueta">
+            SEU PORTAL DE DOWNLOADS
+          </span>
+
           <h1>MANINHO DOWNLOADS</h1>
+
           <p>
             Seus aplicativos, programas e jogos favoritos
             em um só lugar.
@@ -262,6 +357,7 @@ export default function App() {
 
         <div className="hero-arte">
           <div className="circulo">🎮</div>
+
           <p className="arte-legenda">
             DOWNLOADS • JOGOS • PROGRAMAS
           </p>
@@ -308,6 +404,7 @@ export default function App() {
                 <p>
                   Administrador conectado: {session.user.email}
                 </p>
+
                 <button type="button" onClick={sair}>
                   Sair
                 </button>
@@ -319,23 +416,32 @@ export default function App() {
                   : "➕ Adicionar novo download"}
               </h3>
 
-              <form className="form-produto" onSubmit={salvarProduto}>
+              <form
+                className="form-produto"
+                onSubmit={salvarProduto}
+              >
                 <input
                   placeholder="Nome do arquivo"
                   value={novo.nome}
-                  onChange={(e) => atualizarCampo("nome", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("nome", e.target.value)
+                  }
                   required
                 />
 
                 <input
                   placeholder="Descrição"
                   value={novo.descricao}
-                  onChange={(e) => atualizarCampo("descricao", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("descricao", e.target.value)
+                  }
                 />
 
                 <select
                   value={novo.categoria}
-                  onChange={(e) => atualizarCampo("categoria", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("categoria", e.target.value)
+                  }
                 >
                   <option>Aplicativos</option>
                   <option>Programas</option>
@@ -347,40 +453,83 @@ export default function App() {
                 <input
                   placeholder="Plataforma (Windows, Android...)"
                   value={novo.plataforma}
-                  onChange={(e) => atualizarCampo("plataforma", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("plataforma", e.target.value)
+                  }
                 />
 
                 <input
                   placeholder="Ícone ou emoji"
                   value={novo.icone}
-                  onChange={(e) => atualizarCampo("icone", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("icone", e.target.value)
+                  }
                 />
 
                 <input
                   type="url"
                   placeholder="Link para baixar"
                   value={novo.link}
-                  onChange={(e) => atualizarCampo("link", e.target.value)}
+                  onChange={(e) =>
+                    atualizarCampo("link", e.target.value)
+                  }
                   required
                 />
 
-                <input
-                  type="url"
-                  placeholder="Link da imagem (opcional)"
-                  value={novo.imagem}
-                  onChange={(e) => atualizarCampo("imagem", e.target.value)}
-                />
+                <div className="campo-imagem">
+                  <label htmlFor="arquivo-imagem">
+                    🖼️ Escolher imagem do computador
+                  </label>
+
+                  <input
+                    id="arquivo-imagem"
+                    type="file"
+                    accept="image/*"
+                    onChange={escolherImagem}
+                  />
+
+                  <small>
+                    Escolha uma imagem do computador.
+                    Tamanho máximo: 5 MB.
+                  </small>
+
+                  {imagemPreview && (
+                    <div className="imagem-preview">
+                      <img
+                        src={imagemPreview}
+                        alt="Prévia da imagem selecionada"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          limparPreview();
+
+                          setNovo((atual) => ({
+                            ...atual,
+                            imagem: ""
+                          }));
+                        }}
+                      >
+                        Remover imagem
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <button type="submit" disabled={salvando}>
                   {salvando
-                    ? "Salvando..."
+                    ? "Enviando..."
                     : editandoId
                     ? "💾 Salvar alterações"
                     : "➕ Adicionar download"}
                 </button>
 
                 {editandoId && (
-                  <button type="button" onClick={cancelarEdicao}>
+                  <button
+                    type="button"
+                    onClick={cancelarEdicao}
+                  >
                     Cancelar edição
                   </button>
                 )}
@@ -391,7 +540,9 @@ export default function App() {
               <div className="admin-lista">
                 {produtos.map((p) => (
                   <div className="admin-item" key={p.id}>
-                    <span>{p.icone} {p.nome}</span>
+                    <span>
+                      {p.icone} {p.nome}
+                    </span>
 
                     <div className="admin-acoes">
                       <button
@@ -423,7 +574,9 @@ export default function App() {
       )}
 
       <main className="catalogo">
-        <h2 className="titulo-secao">Explore nossos downloads</h2>
+        <h2 className="titulo-secao">
+          Explore nossos downloads
+        </h2>
 
         <p className="contador">
           {filtrados.length} downloads disponíveis
@@ -440,7 +593,9 @@ export default function App() {
           {categorias.map((categoria) => (
             <button
               key={categoria}
-              className={`filtro ${categoriaAtiva === categoria ? "ativo" : ""}`}
+              className={`filtro ${
+                categoriaAtiva === categoria ? "ativo" : ""
+              }`}
               onClick={() => setCategoriaAtiva(categoria)}
             >
               {categoria}
@@ -464,12 +619,16 @@ export default function App() {
               </div>
 
               <div className="card-info">
-                <span className="etiqueta">{p.categoria}</span>
+                <span className="etiqueta">
+                  {p.categoria}
+                </span>
+
                 <h3>{p.nome}</h3>
                 <p>{p.descricao}</p>
 
                 <div className="card-rodape">
                   <span>{p.plataforma}</span>
+
                   <a
                     href={p.link}
                     target="_blank"
@@ -484,7 +643,9 @@ export default function App() {
         </div>
 
         {filtrados.length === 0 && (
-          <p className="vazio">Nenhum download encontrado.</p>
+          <p className="vazio">
+            Nenhum download encontrado.
+          </p>
         )}
       </main>
 
