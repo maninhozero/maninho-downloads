@@ -618,3 +618,212 @@ button {
     height: 180px;
   }
 }
+
+/* BANNER PRINCIPAL */
+
+.banner-principal {
+  position: relative;
+  max-width: 1250px;
+  min-height: 230px;
+  margin: 20px auto;
+  padding: 35px;
+  overflow: hidden;
+  border: 1px solid #087fbd;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at right, #07558a, transparent 45%),
+    linear-gradient(120deg, #101923, #07111d);
+}
+
+.banner-principal > img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.banner-texto {
+  position: relative;
+  z-index: 1;
+}
+
+.banner-texto span {
+  color: #00aaff;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 3px;
+}
+
+.banner-texto h1 {
+  margin: 15px 0;
+  font-size: clamp(28px, 5vw, 48px);
+}
+
+.banner-texto p {
+  color: #aab8c8;
+  line-height: 1.6;
+}
+
+/* NAVEGAÇÃO ENTRE AS ÁREAS */
+
+.navegacao-area {
+  max-width: 900px;
+  margin: 30px auto;
+  padding: 0 15px;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.navegacao-area button,
+.admin-tipos button {
+  padding: 13px 22px;
+  border: 1px solid #29445e;
+  border-radius: 9px;
+  background: #101a28;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.navegacao-area button:hover,
+.navegacao-area button.selecionado,
+.admin-tipos button:hover,
+.admin-tipos button.selecionado {
+  border-color: #00aaff;
+  background: #0077bb;
+}
+
+/* TIPOS DO PAINEL */
+
+.admin-tipos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+/* BOTÃO ASSISTIR */
+
+.card-rodape button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 7px;
+  background: #007fbd;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.card-rodape button:hover {
+  background: #009fe8;
+}
+
+/* PLAYER */
+
+.player-canal {
+  width: 100%;
+  max-width: 1000px;
+  margin: 25px auto 40px;
+  padding: 18px;
+  border: 1px solid #087fbd;
+  border-radius: 14px;
+  background: #101923;
+  box-shadow: 0 0 25px #0077bb22;
+}
+
+.player-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.player-cabecalho h3 {
+  color: #00aaff;
+}
+
+.player-cabecalho button {
+  padding: 9px 13px;
+  border: 1px solid #ff4545;
+  border-radius: 7px;
+  background: #35151b;
+  color: white;
+  cursor: pointer;
+}
+
+.player-canal video,
+.player-canal iframe {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: none;
+  border-radius: 10px;
+  background: #000;
+}
+
+.player-canal video {
+  height: auto;
+  max-height: 650px;
+}
+
+.player-aviso {
+  margin-top: 12px;
+  color: #9fb3c8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* CARREGAMENTO */
+
+.carregamento {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+}
+
+/* RESPONSIVIDADE ADICIONAL */
+
+@media (max-width: 900px) {
+  .banner-principal {
+    margin: 15px;
+  }
+}
+
+@media (max-width: 600px) {
+  .banner-principal {
+    min-height: 180px;
+    margin: 12px;
+    padding: 25px 18px;
+  }
+
+  .navegacao-area {
+    flex-direction: column;
+  }
+
+  .navegacao-area button {
+    width: 100%;
+  }
+
+  .admin-tipos {
+    flex-direction: column;
+  }
+
+  .admin-tipos button {
+    width: 100%;
+  }
+
+  .player-canal {
+    padding: 10px;
+  }
+
+  .player-cabecalho {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
