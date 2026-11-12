@@ -1,6 +1,8 @@
 
 import { useEffect, useState } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import Player from "./Player.jsx";
 import "./App.css";
 
 const produtoVazio = {
@@ -35,7 +37,6 @@ const canaisEsportivos = [
   { nome: "Paramount+", url: "https://nphd.online/tv/paramountplus" }
 ];
 
-// SOMENTE ESTES SETE CAMPEONATOS
 const LIGAS_PERMITIDAS = {
   71: "Brasileirão Série A",
   73: "Copa do Brasil",
@@ -97,7 +98,7 @@ function statusPartida(status) {
   return estados[status] || status || "Status indisponível";
 }
 
-export default function App() {
+function Home() {
   const [produtos, setProdutos] = useState([]);
   const [canais, setCanais] = useState([]);
 
@@ -147,18 +148,16 @@ export default function App() {
       return;
     }
 
-    setProdutos(
-      (data || []).map((item) => ({
-        id: item.id,
-        nome: item.title,
-        descricao: item.description || "",
-        categoria: item.category || "Outros",
-        plataforma: item.platform || "Windows",
-        icone: item.icon || "📦",
-        link: item.download_url,
-        imagem: item.image_url || ""
-      }))
-    );
+    setProdutos((data || []).map((item) => ({
+      id: item.id,
+      nome: item.title,
+      descricao: item.description || "",
+      categoria: item.category || "Outros",
+      plataforma: item.platform || "Windows",
+      icone: item.icon || "📦",
+      link: item.download_url,
+      imagem: item.image_url || ""
+    })));
   }
 
   async function carregarCanais() {
@@ -172,16 +171,14 @@ export default function App() {
       return;
     }
 
-    setCanais(
-      (data || []).map((item) => ({
-        id: item.id,
-        nome: item.nome,
-        descricao: item.descricao || "",
-        categoria: item.categoria || "TV",
-        imagem: item.logo_url || "",
-        link: item.stream_url
-      }))
-    );
+    setCanais((data || []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      descricao: item.descricao || "",
+      categoria: item.categoria || "TV",
+      imagem: item.logo_url || "",
+      link: item.stream_url
+    })));
   }
 
   async function carregarJogos() {
@@ -198,44 +195,33 @@ export default function App() {
         throw new Error(error.message || "Não foi possível consultar a função.");
       }
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (data?.error) throw new Error(data.error);
 
       if (!Array.isArray(data?.data)) {
         throw new Error("A API não retornou uma lista válida de partidas.");
       }
 
-      // FILTRO EXTRA: remove qualquer campeonato que não esteja permitido.
       const jogosPermitidos = data.data
-        .filter((jogo) => {
-          const ligaId = Number(jogo.league?.id);
-
-          return Object.prototype.hasOwnProperty.call(
+        .filter((jogo) =>
+          Object.prototype.hasOwnProperty.call(
             LIGAS_PERMITIDAS,
-            ligaId
-          );
-        })
-        .map((jogo) => {
-          const ligaId = Number(jogo.league?.id);
-
-          return {
-            ...jogo,
-            league: {
-              ...jogo.league,
-              name: LIGAS_PERMITIDAS[ligaId]
-            }
-          };
-        });
+            Number(jogo.league?.id)
+          )
+        )
+        .map((jogo) => ({
+          ...jogo,
+          league: {
+            ...jogo.league,
+            name: LIGAS_PERMITIDAS[Number(jogo.league?.id)]
+          }
+        }));
 
       setJogos(jogosPermitidos);
 
-      setUltimaAtualizacao(
-        new Date().toLocaleTimeString("pt-BR", {
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-      );
+      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }));
     } catch (error) {
       setErroJogos(error.message || "Erro ao consultar os jogos.");
     } finally {
@@ -374,9 +360,7 @@ export default function App() {
   }
 
   async function enviarImagem(pasta, imagemAtual) {
-    if (!imagemArquivo) {
-      return imagemAtual || "";
-    }
+    if (!imagemArquivo) return imagemAtual || "";
 
     const nomeArquivo = imagemArquivo.name.replace(
       /[^a-zA-Z0-9._-]/g,
@@ -470,10 +454,7 @@ export default function App() {
     setMensagem("Salvando download...");
 
     try {
-      const imagem = await enviarImagem(
-        "downloads",
-        novoProduto.imagem
-      );
+      const imagem = await enviarImagem("downloads", novoProduto.imagem);
 
       const dados = {
         title: novoProduto.nome.trim(),
@@ -485,27 +466,13 @@ export default function App() {
         image_url: imagem
       };
 
-      let resultado;
-
-      if (editandoDownloadId) {
-        resultado = await supabase
-          .from("downloads")
-          .update(dados)
-          .eq("id", editandoDownloadId);
-      } else {
-        resultado = await supabase
-          .from("downloads")
-          .insert([dados]);
-      }
+      const resultado = editandoDownloadId
+        ? await supabase.from("downloads").update(dados).eq("id", editandoDownloadId)
+        : await supabase.from("downloads").insert([dados]);
 
       if (resultado.error) throw resultado.error;
 
-      setMensagem(
-        editandoDownloadId
-          ? "Download atualizado!"
-          : "Download cadastrado!"
-      );
-
+      setMensagem(editandoDownloadId ? "Download atualizado!" : "Download cadastrado!");
       cancelarEdicao();
       await carregarProdutos();
     } catch (error) {
@@ -525,10 +492,7 @@ export default function App() {
       return;
     }
 
-    if (
-      novoCanal.logo_url.trim() &&
-      !urlValida(novoCanal.logo_url)
-    ) {
+    if (novoCanal.logo_url.trim() && !urlValida(novoCanal.logo_url)) {
       setMensagem("O endereço do logotipo não é válido.");
       return;
     }
@@ -537,10 +501,7 @@ export default function App() {
     setMensagem("Salvando canal...");
 
     try {
-      const imagem = await enviarImagem(
-        "canais",
-        novoCanal.logo_url
-      );
+      const imagem = await enviarImagem("canais", novoCanal.logo_url);
 
       const dados = {
         nome: novoCanal.nome.trim(),
@@ -550,27 +511,13 @@ export default function App() {
         stream_url: novoCanal.stream_url.trim()
       };
 
-      let resultado;
-
-      if (editandoCanalId) {
-        resultado = await supabase
-          .from("canais")
-          .update(dados)
-          .eq("id", editandoCanalId);
-      } else {
-        resultado = await supabase
-          .from("canais")
-          .insert([dados]);
-      }
+      const resultado = editandoCanalId
+        ? await supabase.from("canais").update(dados).eq("id", editandoCanalId)
+        : await supabase.from("canais").insert([dados]);
 
       if (resultado.error) throw resultado.error;
 
-      setMensagem(
-        editandoCanalId
-          ? "Canal atualizado!"
-          : "Canal cadastrado!"
-      );
-
+      setMensagem(editandoCanalId ? "Canal atualizado!" : "Canal cadastrado!");
       cancelarEdicao();
       await carregarCanais();
     } catch (error) {
@@ -592,17 +539,11 @@ export default function App() {
 
   function alternarCanalTransmissao(canal) {
     setCanaisSelecionados((atuais) => {
-      const existe = atuais.some(
-        (item) => item.nome === canal.nome
-      );
+      const existe = atuais.some((item) => item.nome === canal.nome);
 
-      if (existe) {
-        return atuais.filter(
-          (item) => item.nome !== canal.nome
-        );
-      }
-
-      return [...atuais, canal];
+      return existe
+        ? atuais.filter((item) => item.nome !== canal.nome)
+        : [...atuais, canal];
     });
   }
 
@@ -654,9 +595,7 @@ export default function App() {
   async function excluirTransmissao(id) {
     if (!adminAutorizado) return;
 
-    if (!window.confirm("Deseja remover os canais desta partida?")) {
-      return;
-    }
+    if (!window.confirm("Deseja remover os canais desta partida?")) return;
 
     const { error } = await supabase
       .from("transmissoes_jogos")
@@ -716,13 +655,9 @@ export default function App() {
 
   async function excluirDownload(id) {
     if (!adminAutorizado) return;
-
     if (!window.confirm("Deseja excluir este download?")) return;
 
-    const { error } = await supabase
-      .from("downloads")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("downloads").delete().eq("id", id);
 
     if (error) {
       setMensagem("Erro ao excluir: " + error.message);
@@ -735,13 +670,9 @@ export default function App() {
 
   async function excluirCanal(id) {
     if (!adminAutorizado) return;
-
     if (!window.confirm("Deseja excluir este canal?")) return;
 
-    const { error } = await supabase
-      .from("canais")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("canais").delete().eq("id", id);
 
     if (error) {
       setMensagem("Erro ao excluir: " + error.message);
@@ -754,12 +685,11 @@ export default function App() {
     await carregarCanais();
   }
 
-  const listaAtual =
-    area === "downloads"
-      ? produtos
-      : area === "canais"
-        ? canais
-        : [];
+  const listaAtual = area === "downloads"
+    ? produtos
+    : area === "canais"
+      ? canais
+      : [];
 
   const categorias = [
     "Todos",
@@ -774,8 +704,7 @@ export default function App() {
       item.descricao.toLowerCase().includes(termo);
 
     const correspondeCategoria =
-      categoriaAtiva === "Todos" ||
-      item.categoria === categoriaAtiva;
+      categoriaAtiva === "Todos" || item.categoria === categoriaAtiva;
 
     return correspondePesquisa && correspondeCategoria;
   });
@@ -806,9 +735,7 @@ export default function App() {
       <header className="topo">
         <div className="logo">
           <span className="logo-icon">🎮</span>
-          <span>
-            MANINHO <strong>DOWNLOADS</strong>
-          </span>
+          <span>MANINHO <strong>DOWNLOADS</strong></span>
         </div>
 
         <button
@@ -831,9 +758,7 @@ export default function App() {
         <div className="banner-texto">
           <span>SEU ESPAÇO DIGITAL</span>
           <h1>MANINHO DOWNLOADS</h1>
-          <p>
-            Downloads, jogos, aplicativos, futebol e canais em um só lugar.
-          </p>
+          <p>Downloads, jogos, aplicativos, futebol e canais em um só lugar.</p>
         </div>
       </section>
 
@@ -935,11 +860,7 @@ export default function App() {
 
               {tipoAdmin === "downloads" ? (
                 <>
-                  <h3>
-                    {editandoDownloadId
-                      ? "✏️ Editar download"
-                      : "➕ Adicionar download"}
-                  </h3>
+                  <h3>{editandoDownloadId ? "✏️ Editar download" : "➕ Adicionar download"}</h3>
 
                   <form className="form-produto" onSubmit={salvarDownload}>
                     <input
@@ -987,9 +908,7 @@ export default function App() {
                     />
 
                     <div className="campo-imagem">
-                      <label htmlFor="imagem-admin">
-                        🖼️ Escolher imagem
-                      </label>
+                      <label htmlFor="imagem-admin">🖼️ Escolher imagem</label>
 
                       <input
                         id="imagem-admin"
@@ -1019,9 +938,7 @@ export default function App() {
                     </button>
 
                     {(editandoDownloadId || imagemPreview) && (
-                      <button type="button" onClick={cancelarEdicao}>
-                        Cancelar
-                      </button>
+                      <button type="button" onClick={cancelarEdicao}>Cancelar</button>
                     )}
                   </form>
 
@@ -1033,17 +950,10 @@ export default function App() {
                         <span>{p.icone} {p.nome}</span>
 
                         <div className="admin-acoes">
-                          <button
-                            className="botao-editar"
-                            onClick={() => iniciarEdicaoDownload(p)}
-                          >
+                          <button className="botao-editar" onClick={() => iniciarEdicaoDownload(p)}>
                             ✏️ Editar
                           </button>
-
-                          <button
-                            className="botao-excluir"
-                            onClick={() => excluirDownload(p.id)}
-                          >
+                          <button className="botao-excluir" onClick={() => excluirDownload(p.id)}>
                             🗑️ Excluir
                           </button>
                         </div>
@@ -1053,11 +963,7 @@ export default function App() {
                 </>
               ) : tipoAdmin === "canais" ? (
                 <>
-                  <h3>
-                    {editandoCanalId
-                      ? "✏️ Editar canal"
-                      : "➕ Adicionar canal"}
-                  </h3>
+                  <h3>{editandoCanalId ? "✏️ Editar canal" : "➕ Adicionar canal"}</h3>
 
                   <form className="form-produto" onSubmit={salvarCanal}>
                     <input
@@ -1102,23 +1008,18 @@ export default function App() {
                     />
 
                     <div className="campo-imagem">
-                      <label htmlFor="imagem-canal">
-                        🖼️ Enviar logotipo do computador
-                      </label>
-
+                      <label htmlFor="imagem-canal">🖼️ Enviar logotipo do computador</label>
                       <input
                         id="imagem-canal"
                         type="file"
                         accept="image/*"
                         onChange={escolherImagem}
                       />
-
                       <small>Imagem de até 5 MB.</small>
 
                       {imagemPreview && (
                         <div className="imagem-preview">
                           <img src={imagemPreview} alt="Prévia do logotipo" />
-
                           <button
                             type="button"
                             onClick={() => {
@@ -1137,9 +1038,7 @@ export default function App() {
                     </button>
 
                     {(editandoCanalId || imagemPreview) && (
-                      <button type="button" onClick={cancelarEdicao}>
-                        Cancelar
-                      </button>
+                      <button type="button" onClick={cancelarEdicao}>Cancelar</button>
                     )}
                   </form>
 
@@ -1151,17 +1050,10 @@ export default function App() {
                         <span>📺 {c.nome}</span>
 
                         <div className="admin-acoes">
-                          <button
-                            className="botao-editar"
-                            onClick={() => iniciarEdicaoCanal(c)}
-                          >
+                          <button className="botao-editar" onClick={() => iniciarEdicaoCanal(c)}>
                             ✏️ Editar
                           </button>
-
-                          <button
-                            className="botao-excluir"
-                            onClick={() => excluirCanal(c.id)}
-                          >
+                          <button className="botao-excluir" onClick={() => excluirCanal(c.id)}>
                             🗑️ Excluir
                           </button>
                         </div>
@@ -1174,8 +1066,7 @@ export default function App() {
                   <h3>⚽ Associar canais às partidas</h3>
 
                   <p className="contador">
-                    Escolha uma partida e marque somente os canais com
-                    transmissão confirmada.
+                    Escolha uma partida e marque somente os canais com transmissão confirmada.
                   </p>
 
                   <div className="form-produto">
@@ -1186,10 +1077,7 @@ export default function App() {
                       <option value="">Selecione uma partida</option>
 
                       {jogos.map((jogo) => (
-                        <option
-                          key={jogo.fixture?.id}
-                          value={jogo.fixture?.id}
-                        >
+                        <option key={jogo.fixture?.id} value={jogo.fixture?.id}>
                           {jogo.teams?.home?.name} x {jogo.teams?.away?.name}
                         </option>
                       ))}
@@ -1201,17 +1089,11 @@ export default function App() {
 
                         <div className="admin-lista">
                           {canaisEsportivos.map((canal) => (
-                            <label
-                              key={canal.nome}
-                              className="admin-item"
-                              style={{ cursor: "pointer" }}
-                            >
+                            <label key={canal.nome} className="admin-item" style={{ cursor: "pointer" }}>
                               <span>
                                 <input
                                   type="checkbox"
-                                  checked={canaisSelecionados.some(
-                                    (item) => item.nome === canal.nome
-                                  )}
+                                  checked={canaisSelecionados.some((item) => item.nome === canal.nome)}
                                   onChange={() => alternarCanalTransmissao(canal)}
                                 />
                                 {" "}{canal.nome}
@@ -1220,11 +1102,7 @@ export default function App() {
                           ))}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={salvarTransmissao}
-                          disabled={salvando}
-                        >
+                        <button type="button" onClick={salvarTransmissao} disabled={salvando}>
                           {salvando ? "Salvando..." : "💾 Salvar canais da partida"}
                         </button>
                       </>
@@ -1236,10 +1114,7 @@ export default function App() {
                   <div className="admin-lista">
                     {transmissoes.map((item) => (
                       <div className="admin-item" key={item.fixture_id}>
-                        <span>
-                          ⚽ {item.mandante} x {item.visitante}
-                        </span>
-
+                        <span>⚽ {item.mandante} x {item.visitante}</span>
                         <button
                           className="botao-excluir"
                           type="button"
@@ -1251,9 +1126,7 @@ export default function App() {
                     ))}
 
                     {transmissoes.length === 0 && (
-                      <p className="vazio">
-                        Nenhuma associação cadastrada.
-                      </p>
+                      <p className="vazio">Nenhuma associação cadastrada.</p>
                     )}
                   </div>
                 </>
@@ -1270,36 +1143,23 @@ export default function App() {
           <h2 className="titulo-secao">⚽ Futebol de hoje</h2>
 
           <p className="contador">
-            Partidas de{" "}
-            {new Date(`${dataHoje()}T12:00:00`).toLocaleDateString("pt-BR")}
+            Partidas de {new Date(`${dataHoje()}T12:00:00`).toLocaleDateString("pt-BR")}
           </p>
 
-          <button
-            type="button"
-            onClick={carregarJogos}
-            disabled={carregandoJogos}
-          >
+          <button type="button" onClick={carregarJogos} disabled={carregandoJogos}>
             {carregandoJogos ? "Consultando jogos..." : "🔄 Atualizar partidas"}
           </button>
 
           {ultimaAtualizacao && (
-            <p className="contador">
-              Última consulta: {ultimaAtualizacao}
-            </p>
+            <p className="contador">Última consulta: {ultimaAtualizacao}</p>
           )}
 
-          {erroJogos && (
-            <p className="vazio">⚠️ {erroJogos}</p>
-          )}
+          {erroJogos && <p className="vazio">⚠️ {erroJogos}</p>}
 
-          {carregandoJogos && (
-            <p className="vazio">Buscando partidas do dia...</p>
-          )}
+          {carregandoJogos && <p className="vazio">Buscando partidas do dia...</p>}
 
           {!carregandoJogos && !erroJogos && jogos.length === 0 && (
-            <p className="vazio">
-              Nenhuma partida encontrada para hoje.
-            </p>
+            <p className="vazio">Nenhuma partida encontrada para hoje.</p>
           )}
 
           <div className="grade">
@@ -1307,76 +1167,48 @@ export default function App() {
               const canaisDoJogo = canaisDaPartida(jogo.fixture?.id);
 
               return (
-                <article
-                  className="card"
-                  key={jogo.fixture?.id}
-                >
+                <article className="card" key={jogo.fixture?.id}>
                   <div className="card-info">
-                    <span className="etiqueta">
-                      {jogo.league?.name || "Campeonato"}
-                    </span>
-
+                    <span className="etiqueta">{jogo.league?.name || "Campeonato"}</span>
                     <p>{jogo.league?.country || ""}</p>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "10px",
-                        margin: "18px 0"
-                      }}
-                    >
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "10px",
+                      margin: "18px 0"
+                    }}>
                       <div style={{ textAlign: "center", flex: 1 }}>
                         {jogo.teams?.home?.logo && (
-                          <img
-                            src={jogo.teams.home.logo}
-                            alt=""
-                            loading="lazy"
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              objectFit: "contain"
-                            }}
-                          />
+                          <img src={jogo.teams.home.logo} alt="" loading="lazy" style={{
+                            width: "48px",
+                            height: "48px",
+                            objectFit: "contain"
+                          }} />
                         )}
-
                         <h3>{jogo.teams?.home?.name || "Time da casa"}</h3>
                       </div>
 
                       <div style={{ textAlign: "center", minWidth: "55px" }}>
-                        <strong>
-                          {jogo.goals?.home ?? "-"} x {jogo.goals?.away ?? "-"}
-                        </strong>
-
+                        <strong>{jogo.goals?.home ?? "-"} x {jogo.goals?.away ?? "-"}</strong>
                         <p>{horarioPartida(jogo.fixture?.date)}</p>
                       </div>
 
                       <div style={{ textAlign: "center", flex: 1 }}>
                         {jogo.teams?.away?.logo && (
-                          <img
-                            src={jogo.teams.away.logo}
-                            alt=""
-                            loading="lazy"
-                            style={{
-                              width: "48px",
-                              height: "48px",
-                              objectFit: "contain"
-                            }}
-                          />
+                          <img src={jogo.teams.away.logo} alt="" loading="lazy" style={{
+                            width: "48px",
+                            height: "48px",
+                            objectFit: "contain"
+                          }} />
                         )}
-
                         <h3>{jogo.teams?.away?.name || "Time visitante"}</h3>
                       </div>
                     </div>
 
-                    <p>
-                      Status: {statusPartida(jogo.fixture?.status?.short)}
-                    </p>
-
-                    <p>
-                      Estádio: {jogo.fixture?.venue?.name || "Não informado"}
-                    </p>
+                    <p>Status: {statusPartida(jogo.fixture?.status?.short)}</p>
+                    <p>Estádio: {jogo.fixture?.venue?.name || "Não informado"}</p>
 
                     <div style={{ marginTop: "15px" }}>
                       <h3>📺 Onde assistir</h3>
@@ -1384,20 +1216,13 @@ export default function App() {
                       {canaisDoJogo.length > 0 ? (
                         <div className="admin-acoes">
                           {canaisDoJogo.map((canal) => (
-                            <a
-                              key={canal.nome}
-                              href={canal.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
+                            <a key={canal.nome} href={canal.url} target="_blank" rel="noopener noreferrer">
                               {canal.nome} ↗
                             </a>
                           ))}
                         </div>
                       ) : (
-                        <p className="contador">
-                          Transmissão ainda não cadastrada.
-                        </p>
+                        <p className="contador">Transmissão ainda não cadastrada.</p>
                       )}
                     </div>
                   </div>
@@ -1408,10 +1233,8 @@ export default function App() {
 
           <section style={{ marginTop: "35px" }}>
             <h2 className="titulo-secao">📺 Canais esportivos</h2>
-
             <p className="contador">
-              Consulte a programação oficial para confirmar a transmissão
-              de cada partida.
+              Consulte a programação oficial para confirmar a transmissão de cada partida.
             </p>
 
             <div className="grade">
@@ -1423,12 +1246,7 @@ export default function App() {
 
                     <div className="card-rodape">
                       <span>Canal</span>
-
-                      <a
-                        href={canal.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
+                      <a href={canal.url} target="_blank" rel="noopener noreferrer">
                         Abrir página ↗
                       </a>
                     </div>
@@ -1441,23 +1259,16 @@ export default function App() {
       ) : (
         <main className="catalogo">
           <h2 className="titulo-secao">
-            {area === "downloads"
-              ? "Explore nossos downloads"
-              : "Canais cadastrados"}
+            {area === "downloads" ? "Explore nossos downloads" : "Canais cadastrados"}
           </h2>
 
           <p className="contador">
-            {filtrados.length}{" "}
-            {area === "downloads" ? "downloads" : "canais"} disponíveis
+            {filtrados.length} {area === "downloads" ? "downloads" : "canais"} disponíveis
           </p>
 
           <input
             className="pesquisa"
-            placeholder={
-              area === "downloads"
-                ? "🔎 Pesquisar downloads..."
-                : "🔎 Pesquisar canais..."
-            }
+            placeholder={area === "downloads" ? "🔎 Pesquisar downloads..." : "🔎 Pesquisar canais..."}
             value={pesquisa}
             onChange={(e) => setPesquisa(e.target.value)}
           />
@@ -1478,23 +1289,13 @@ export default function App() {
             <section className="player-canal">
               <div className="player-cabecalho">
                 <h3>📺 {canalAtual.nome}</h3>
-
-                <button onClick={() => setCanalAtual(null)}>
-                  Fechar player ✕
-                </button>
+                <button onClick={() => setCanalAtual(null)}>Fechar player ✕</button>
               </div>
 
               {urlValida(canalAtual.link) ? (
                 <div>
-                  <p>
-                    Para acessar este canal, abra a página da fonte autorizada:
-                  </p>
-
-                  <a
-                    href={canalAtual.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <p>Para acessar este canal, abra a página da fonte autorizada:</p>
+                  <a href={canalAtual.link} target="_blank" rel="noopener noreferrer">
                     Abrir canal em nova página ↗
                   </a>
                 </div>
@@ -1513,16 +1314,9 @@ export default function App() {
               <article className="card" key={p.id}>
                 <div className="capa">
                   {p.imagem ? (
-                    <img
-                      className="capa-imagem"
-                      src={p.imagem}
-                      alt={p.nome}
-                      loading="lazy"
-                    />
+                    <img className="capa-imagem" src={p.imagem} alt={p.nome} loading="lazy" />
                   ) : (
-                    <span className="azul">
-                      {area === "downloads" ? "📦" : "📺"}
-                    </span>
+                    <span className="azul">{area === "downloads" ? "📦" : "📺"}</span>
                   )}
                 </div>
 
@@ -1532,16 +1326,10 @@ export default function App() {
                   <p>{p.descricao}</p>
 
                   <div className="card-rodape">
-                    <span>
-                      {area === "downloads" ? p.plataforma : "Canal"}
-                    </span>
+                    <span>{area === "downloads" ? p.plataforma : "Canal"}</span>
 
                     {area === "downloads" ? (
-                      <a
-                        href={p.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
+                      <a href={p.link} target="_blank" rel="noopener noreferrer">
                         Baixar ↗
                       </a>
                     ) : (
@@ -1549,7 +1337,6 @@ export default function App() {
                         type="button"
                         onClick={() => {
                           setCanalAtual(p);
-
                           setTimeout(() => {
                             document.querySelector(".player-canal")?.scrollIntoView({
                               behavior: "smooth"
@@ -1576,10 +1363,19 @@ export default function App() {
 
       <footer className="sobre">
         <p>
-          © {new Date().getFullYear()} MANINHO DOWNLOADS
-          — Todos os direitos reservados.
+          © {new Date().getFullYear()} MANINHO DOWNLOADS — Todos os direitos reservados.
         </p>
       </footer>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/assistir" element={<Player />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
