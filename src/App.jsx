@@ -21,6 +21,31 @@ const canalVazio = {
   stream_url: ""
 };
 
+const canaisEsportivos = [
+  { nome: "ESPN", url: "https://nphd.online/tv/espn" },
+  { nome: "ESPN 2", url: "https://nphd.online/tv/espn2" },
+  { nome: "Premiere", url: "https://nphd.online/tv/premiere" },
+  { nome: "TNT Sports", url: "https://nphd.online/tv/tnt" },
+  { nome: "Prime Video 4", url: "https://nphd.online/tv/primevideo4" },
+  { nome: "Prime Video", url: "https://nphd.online/tv/primevideo" },
+  { nome: "SporTV", url: "https://nphd.online/tv/sportv" },
+  { nome: "SporTV 2", url: "https://nphd.online/tv/sportv2" },
+  { nome: "ESPN 3", url: "https://nphd.online/tv/espn3" },
+  { nome: "Premiere 3", url: "https://nphd.online/tv/premiere3" },
+  { nome: "Paramount+", url: "https://nphd.online/tv/paramountplus" }
+];
+
+// SOMENTE ESTES SETE CAMPEONATOS
+const LIGAS_PERMITIDAS = {
+  71: "Brasileirão Série A",
+  73: "Copa do Brasil",
+  13: "Libertadores",
+  11: "Sul-Americana",
+  2: "Champions League",
+  39: "Premier League",
+  140: "La Liga"
+};
+
 function urlValida(valor) {
   try {
     const url = new URL(valor);
@@ -30,13 +55,60 @@ function urlValida(valor) {
   }
 }
 
-function videoDireto(url) {
-  return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
+function horarioPartida(data) {
+  if (!data) return "--:--";
+
+  return new Date(data).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo"
+  });
+}
+
+function dataHoje() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function statusPartida(status) {
+  const estados = {
+    TBD: "A definir",
+    NS: "Não iniciada",
+    "1H": "1º tempo",
+    HT: "Intervalo",
+    "2H": "2º tempo",
+    ET: "Prorrogação",
+    P: "Pênaltis",
+    FT: "Encerrado",
+    AET: "Encerrado",
+    PEN: "Pênaltis",
+    PST: "Adiado",
+    CANC: "Cancelado",
+    ABD: "Interrompido",
+    AWD: "Resultado administrativo",
+    WO: "W.O.",
+    LIVE: "Ao vivo"
+  };
+
+  return estados[status] || status || "Status indisponível";
 }
 
 export default function App() {
   const [produtos, setProdutos] = useState([]);
   const [canais, setCanais] = useState([]);
+
+  const [jogos, setJogos] = useState([]);
+  const [carregandoJogos, setCarregandoJogos] = useState(false);
+  const [erroJogos, setErroJogos] = useState("");
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState("");
+
+  const [transmissoes, setTransmissoes] = useState([]);
+  const [jogoSelecionadoId, setJogoSelecionadoId] = useState("");
+  const [canaisSelecionados, setCanaisSelecionados] = useState([]);
 
   const [session, setSession] = useState(null);
   const [adminAutorizado, setAdminAutorizado] = useState(false);
@@ -112,6 +184,78 @@ export default function App() {
     );
   }
 
+  async function carregarJogos() {
+    setCarregandoJogos(true);
+    setErroJogos("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "jogos-do-dia",
+        { body: {} }
+      );
+
+      if (error) {
+        throw new Error(error.message || "Não foi possível consultar a função.");
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      if (!Array.isArray(data?.data)) {
+        throw new Error("A API não retornou uma lista válida de partidas.");
+      }
+
+      // FILTRO EXTRA: remove qualquer campeonato que não esteja permitido.
+      const jogosPermitidos = data.data
+        .filter((jogo) => {
+          const ligaId = Number(jogo.league?.id);
+
+          return Object.prototype.hasOwnProperty.call(
+            LIGAS_PERMITIDAS,
+            ligaId
+          );
+        })
+        .map((jogo) => {
+          const ligaId = Number(jogo.league?.id);
+
+          return {
+            ...jogo,
+            league: {
+              ...jogo.league,
+              name: LIGAS_PERMITIDAS[ligaId]
+            }
+          };
+        });
+
+      setJogos(jogosPermitidos);
+
+      setUltimaAtualizacao(
+        new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+      );
+    } catch (error) {
+      setErroJogos(error.message || "Erro ao consultar os jogos.");
+    } finally {
+      setCarregandoJogos(false);
+    }
+  }
+
+  async function carregarTransmissoes() {
+    const { data, error } = await supabase
+      .from("transmissoes_jogos")
+      .select("*");
+
+    if (error) {
+      setMensagem("Erro ao carregar transmissões: " + error.message);
+      return;
+    }
+
+    setTransmissoes(data || []);
+  }
+
   async function verificarAdmin(userId) {
     if (!userId) {
       setAdminAutorizado(false);
@@ -151,7 +295,9 @@ export default function App() {
 
       await Promise.all([
         carregarProdutos(),
-        carregarCanais()
+        carregarCanais(),
+        carregarJogos(),
+        carregarTransmissoes()
       ]);
 
       if (ativo) setCarregando(false);
@@ -375,7 +521,7 @@ export default function App() {
     if (!adminAutorizado || salvando) return;
 
     if (!urlValida(novoCanal.stream_url)) {
-      setMensagem("Informe um endereço válido para o vídeo ou player.");
+      setMensagem("Informe um endereço válido para o canal.");
       return;
     }
 
@@ -431,6 +577,103 @@ export default function App() {
       setMensagem("Erro: " + error.message);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  function selecionarJogoTransmissao(id) {
+    setJogoSelecionadoId(id);
+
+    const salva = transmissoes.find(
+      (item) => String(item.fixture_id) === String(id)
+    );
+
+    setCanaisSelecionados(salva?.canais || []);
+  }
+
+  function alternarCanalTransmissao(canal) {
+    setCanaisSelecionados((atuais) => {
+      const existe = atuais.some(
+        (item) => item.nome === canal.nome
+      );
+
+      if (existe) {
+        return atuais.filter(
+          (item) => item.nome !== canal.nome
+        );
+      }
+
+      return [...atuais, canal];
+    });
+  }
+
+  async function salvarTransmissao() {
+    if (!adminAutorizado || salvando) return;
+
+    const jogo = jogos.find(
+      (item) => String(item.fixture?.id) === String(jogoSelecionadoId)
+    );
+
+    if (!jogo) {
+      setMensagem("Selecione uma partida válida.");
+      return;
+    }
+
+    if (canaisSelecionados.length === 0) {
+      setMensagem("Marque pelo menos um canal.");
+      return;
+    }
+
+    setSalvando(true);
+    setMensagem("Salvando canais da partida...");
+
+    const dados = {
+      fixture_id: jogo.fixture.id,
+      fixture_date: jogo.fixture.date?.slice(0, 10) || null,
+      mandante: jogo.teams?.home?.name || "Time da casa",
+      visitante: jogo.teams?.away?.name || "Time visitante",
+      canais: canaisSelecionados,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const { error } = await supabase
+        .from("transmissoes_jogos")
+        .upsert(dados, { onConflict: "fixture_id" });
+
+      if (error) throw error;
+
+      setMensagem("Canais associados à partida com sucesso!");
+      await carregarTransmissoes();
+    } catch (error) {
+      setMensagem("Erro ao salvar transmissão: " + error.message);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirTransmissao(id) {
+    if (!adminAutorizado) return;
+
+    if (!window.confirm("Deseja remover os canais desta partida?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("transmissoes_jogos")
+      .delete()
+      .eq("fixture_id", id);
+
+    if (error) {
+      setMensagem("Erro ao remover: " + error.message);
+      return;
+    }
+
+    setMensagem("Associação removida!");
+    await carregarTransmissoes();
+
+    if (String(jogoSelecionadoId) === String(id)) {
+      setJogoSelecionadoId("");
+      setCanaisSelecionados([]);
     }
   }
 
@@ -511,7 +754,12 @@ export default function App() {
     await carregarCanais();
   }
 
-  const listaAtual = area === "downloads" ? produtos : canais;
+  const listaAtual =
+    area === "downloads"
+      ? produtos
+      : area === "canais"
+        ? canais
+        : [];
 
   const categorias = [
     "Todos",
@@ -537,6 +785,12 @@ export default function App() {
     setCategoriaAtiva("Todos");
     setPesquisa("");
     setCanalAtual(null);
+  }
+
+  function canaisDaPartida(fixtureId) {
+    return transmissoes.find(
+      (item) => String(item.fixture_id) === String(fixtureId)
+    )?.canais || [];
   }
 
   if (carregando) {
@@ -573,10 +827,13 @@ export default function App() {
             e.currentTarget.style.display = "none";
           }}
         />
+
         <div className="banner-texto">
           <span>SEU ESPAÇO DIGITAL</span>
           <h1>MANINHO DOWNLOADS</h1>
-          <p>Downloads, jogos, aplicativos e canais em um só lugar.</p>
+          <p>
+            Downloads, jogos, aplicativos, futebol e canais em um só lugar.
+          </p>
         </div>
       </section>
 
@@ -592,7 +849,14 @@ export default function App() {
           className={area === "canais" ? "selecionado" : ""}
           onClick={() => mudarArea("canais")}
         >
-          📺 Canais ao Vivo
+          📺 Canais
+        </button>
+
+        <button
+          className={area === "futebol" ? "selecionado" : ""}
+          onClick={() => mudarArea("futebol")}
+        >
+          ⚽ Futebol de hoje
         </button>
       </nav>
 
@@ -655,6 +919,18 @@ export default function App() {
                 >
                   📺 Gerenciar canais
                 </button>
+
+                <button
+                  className={tipoAdmin === "transmissoes" ? "selecionado" : ""}
+                  onClick={() => {
+                    cancelarEdicao();
+                    setTipoAdmin("transmissoes");
+                    setJogoSelecionadoId("");
+                    setCanaisSelecionados([]);
+                  }}
+                >
+                  ⚽ Associar canais às partidas
+                </button>
               </div>
 
               {tipoAdmin === "downloads" ? (
@@ -714,12 +990,14 @@ export default function App() {
                       <label htmlFor="imagem-admin">
                         🖼️ Escolher imagem
                       </label>
+
                       <input
                         id="imagem-admin"
                         type="file"
                         accept="image/*"
                         onChange={escolherImagem}
                       />
+
                       {imagemPreview && (
                         <div className="imagem-preview">
                           <img src={imagemPreview} alt="Prévia" />
@@ -753,6 +1031,7 @@ export default function App() {
                     {produtos.map((p) => (
                       <div className="admin-item" key={p.id}>
                         <span>{p.icone} {p.nome}</span>
+
                         <div className="admin-acoes">
                           <button
                             className="botao-editar"
@@ -760,6 +1039,7 @@ export default function App() {
                           >
                             ✏️ Editar
                           </button>
+
                           <button
                             className="botao-excluir"
                             onClick={() => excluirDownload(p.id)}
@@ -771,7 +1051,7 @@ export default function App() {
                     ))}
                   </div>
                 </>
-              ) : (
+              ) : tipoAdmin === "canais" ? (
                 <>
                   <h3>
                     {editandoCanalId
@@ -815,7 +1095,7 @@ export default function App() {
 
                     <input
                       type="url"
-                      placeholder="Link do player ou vídeo autorizado"
+                      placeholder="Link do canal autorizado"
                       value={novoCanal.stream_url}
                       onChange={(e) => atualizarCanal("stream_url", e.target.value)}
                       required
@@ -825,17 +1105,20 @@ export default function App() {
                       <label htmlFor="imagem-canal">
                         🖼️ Enviar logotipo do computador
                       </label>
+
                       <input
                         id="imagem-canal"
                         type="file"
                         accept="image/*"
                         onChange={escolherImagem}
                       />
+
                       <small>Imagem de até 5 MB.</small>
 
                       {imagemPreview && (
                         <div className="imagem-preview">
                           <img src={imagemPreview} alt="Prévia do logotipo" />
+
                           <button
                             type="button"
                             onClick={() => {
@@ -866,6 +1149,7 @@ export default function App() {
                     {canais.map((c) => (
                       <div className="admin-item" key={c.id}>
                         <span>📺 {c.nome}</span>
+
                         <div className="admin-acoes">
                           <button
                             className="botao-editar"
@@ -873,6 +1157,7 @@ export default function App() {
                           >
                             ✏️ Editar
                           </button>
+
                           <button
                             className="botao-excluir"
                             onClick={() => excluirCanal(c.id)}
@@ -884,6 +1169,94 @@ export default function App() {
                     ))}
                   </div>
                 </>
+              ) : (
+                <>
+                  <h3>⚽ Associar canais às partidas</h3>
+
+                  <p className="contador">
+                    Escolha uma partida e marque somente os canais com
+                    transmissão confirmada.
+                  </p>
+
+                  <div className="form-produto">
+                    <select
+                      value={jogoSelecionadoId}
+                      onChange={(e) => selecionarJogoTransmissao(e.target.value)}
+                    >
+                      <option value="">Selecione uma partida</option>
+
+                      {jogos.map((jogo) => (
+                        <option
+                          key={jogo.fixture?.id}
+                          value={jogo.fixture?.id}
+                        >
+                          {jogo.teams?.home?.name} x {jogo.teams?.away?.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {jogoSelecionadoId && (
+                      <>
+                        <h3>Marque os canais</h3>
+
+                        <div className="admin-lista">
+                          {canaisEsportivos.map((canal) => (
+                            <label
+                              key={canal.nome}
+                              className="admin-item"
+                              style={{ cursor: "pointer" }}
+                            >
+                              <span>
+                                <input
+                                  type="checkbox"
+                                  checked={canaisSelecionados.some(
+                                    (item) => item.nome === canal.nome
+                                  )}
+                                  onChange={() => alternarCanalTransmissao(canal)}
+                                />
+                                {" "}{canal.nome}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={salvarTransmissao}
+                          disabled={salvando}
+                        >
+                          {salvando ? "Salvando..." : "💾 Salvar canais da partida"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <h3>Associações cadastradas</h3>
+
+                  <div className="admin-lista">
+                    {transmissoes.map((item) => (
+                      <div className="admin-item" key={item.fixture_id}>
+                        <span>
+                          ⚽ {item.mandante} x {item.visitante}
+                        </span>
+
+                        <button
+                          className="botao-excluir"
+                          type="button"
+                          onClick={() => excluirTransmissao(item.fixture_id)}
+                        >
+                          🗑️ Remover
+                        </button>
+                      </div>
+                    ))}
+
+                    {transmissoes.length === 0 && (
+                      <p className="vazio">
+                        Nenhuma associação cadastrada.
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}
@@ -892,133 +1265,314 @@ export default function App() {
         </section>
       )}
 
-      <main className="catalogo">
-        <h2 className="titulo-secao">
-          {area === "downloads" ? "Explore nossos downloads" : "Canais ao Vivo"}
-        </h2>
+      {area === "futebol" ? (
+        <main className="catalogo">
+          <h2 className="titulo-secao">⚽ Futebol de hoje</h2>
 
-        <p className="contador">
-          {filtrados.length} {area === "downloads" ? "downloads" : "canais"} disponíveis
-        </p>
+          <p className="contador">
+            Partidas de{" "}
+            {new Date(`${dataHoje()}T12:00:00`).toLocaleDateString("pt-BR")}
+          </p>
 
-        <input
-          className="pesquisa"
-          placeholder={area === "downloads" ? "🔎 Pesquisar downloads..." : "🔎 Pesquisar canais..."}
-          value={pesquisa}
-          onChange={(e) => setPesquisa(e.target.value)}
-        />
+          <button
+            type="button"
+            onClick={carregarJogos}
+            disabled={carregandoJogos}
+          >
+            {carregandoJogos ? "Consultando jogos..." : "🔄 Atualizar partidas"}
+          </button>
 
-        <div className="filtros">
-          {categorias.map((categoria) => (
-            <button
-              key={categoria}
-              className={`filtro ${categoriaAtiva === categoria ? "ativo" : ""}`}
-              onClick={() => setCategoriaAtiva(categoria)}
-            >
-              {categoria}
-            </button>
-          ))}
-        </div>
-
-        {area === "canais" && canalAtual && (
-          <section className="player-canal">
-            <div className="player-cabecalho">
-              <h3>📺 {canalAtual.nome}</h3>
-              <button onClick={() => setCanalAtual(null)}>
-                Fechar player ✕
-              </button>
-            </div>
-
-            {urlValida(canalAtual.link) ? (
-              videoDireto(canalAtual.link) ? (
-                <video
-                  controls
-                  playsInline
-                  autoPlay
-                  src={canalAtual.link}
-                >
-                  Seu navegador não suporta vídeo.
-                </video>
-              ) : (
-                <iframe
-                  src={canalAtual.link}
-                  title={canalAtual.nome}
-                  allow="autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen
-                  referrerPolicy="strict-origin-when-cross-origin"
-                />
-              )
-            ) : (
-              <p>O endereço deste player não é válido.</p>
-            )}
-
-            <p className="player-aviso">
-              A reprodução depende da compatibilidade e da autorização da fonte.
+          {ultimaAtualizacao && (
+            <p className="contador">
+              Última consulta: {ultimaAtualizacao}
             </p>
-          </section>
-        )}
+          )}
 
-        <div className="grade">
-          {filtrados.map((p) => (
-            <article className="card" key={p.id}>
-              <div className="capa">
-                {p.imagem ? (
-                  <img
-                    className="capa-imagem"
-                    src={p.imagem}
-                    alt={p.nome}
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="azul">
-                    {area === "downloads" ? "📦" : "📺"}
-                  </span>
-                )}
-              </div>
+          {erroJogos && (
+            <p className="vazio">⚠️ {erroJogos}</p>
+          )}
 
-              <div className="card-info">
-                <span className="etiqueta">{p.categoria}</span>
-                <h3>{p.nome}</h3>
-                <p>{p.descricao}</p>
+          {carregandoJogos && (
+            <p className="vazio">Buscando partidas do dia...</p>
+          )}
 
-                <div className="card-rodape">
-                  <span>
-                    {area === "downloads" ? p.plataforma : "Ao vivo"}
-                  </span>
+          {!carregandoJogos && !erroJogos && jogos.length === 0 && (
+            <p className="vazio">
+              Nenhuma partida encontrada para hoje.
+            </p>
+          )}
 
-                  {area === "downloads" ? (
-                    <a
-                      href={p.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Baixar ↗
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCanalAtual(p);
-                        document.querySelector(".player-canal")?.scrollIntoView({
-                          behavior: "smooth"
-                        });
+          <div className="grade">
+            {jogos.map((jogo) => {
+              const canaisDoJogo = canaisDaPartida(jogo.fixture?.id);
+
+              return (
+                <article
+                  className="card"
+                  key={jogo.fixture?.id}
+                >
+                  <div className="card-info">
+                    <span className="etiqueta">
+                      {jogo.league?.name || "Campeonato"}
+                    </span>
+
+                    <p>{jogo.league?.country || ""}</p>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        margin: "18px 0"
                       }}
                     >
-                      Assistir ▶
-                    </button>
+                      <div style={{ textAlign: "center", flex: 1 }}>
+                        {jogo.teams?.home?.logo && (
+                          <img
+                            src={jogo.teams.home.logo}
+                            alt=""
+                            loading="lazy"
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              objectFit: "contain"
+                            }}
+                          />
+                        )}
+
+                        <h3>{jogo.teams?.home?.name || "Time da casa"}</h3>
+                      </div>
+
+                      <div style={{ textAlign: "center", minWidth: "55px" }}>
+                        <strong>
+                          {jogo.goals?.home ?? "-"} x {jogo.goals?.away ?? "-"}
+                        </strong>
+
+                        <p>{horarioPartida(jogo.fixture?.date)}</p>
+                      </div>
+
+                      <div style={{ textAlign: "center", flex: 1 }}>
+                        {jogo.teams?.away?.logo && (
+                          <img
+                            src={jogo.teams.away.logo}
+                            alt=""
+                            loading="lazy"
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              objectFit: "contain"
+                            }}
+                          />
+                        )}
+
+                        <h3>{jogo.teams?.away?.name || "Time visitante"}</h3>
+                      </div>
+                    </div>
+
+                    <p>
+                      Status: {statusPartida(jogo.fixture?.status?.short)}
+                    </p>
+
+                    <p>
+                      Estádio: {jogo.fixture?.venue?.name || "Não informado"}
+                    </p>
+
+                    <div style={{ marginTop: "15px" }}>
+                      <h3>📺 Onde assistir</h3>
+
+                      {canaisDoJogo.length > 0 ? (
+                        <div className="admin-acoes">
+                          {canaisDoJogo.map((canal) => (
+                            <a
+                              key={canal.nome}
+                              href={canal.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {canal.nome} ↗
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="contador">
+                          Transmissão ainda não cadastrada.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <section style={{ marginTop: "35px" }}>
+            <h2 className="titulo-secao">📺 Canais esportivos</h2>
+
+            <p className="contador">
+              Consulte a programação oficial para confirmar a transmissão
+              de cada partida.
+            </p>
+
+            <div className="grade">
+              {canaisEsportivos.map((canal) => (
+                <article className="card" key={canal.nome}>
+                  <div className="card-info">
+                    <span className="etiqueta">Esportes</span>
+                    <h3>{canal.nome}</h3>
+
+                    <div className="card-rodape">
+                      <span>Canal</span>
+
+                      <a
+                        href={canal.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Abrir página ↗
+                      </a>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </main>
+      ) : (
+        <main className="catalogo">
+          <h2 className="titulo-secao">
+            {area === "downloads"
+              ? "Explore nossos downloads"
+              : "Canais cadastrados"}
+          </h2>
+
+          <p className="contador">
+            {filtrados.length}{" "}
+            {area === "downloads" ? "downloads" : "canais"} disponíveis
+          </p>
+
+          <input
+            className="pesquisa"
+            placeholder={
+              area === "downloads"
+                ? "🔎 Pesquisar downloads..."
+                : "🔎 Pesquisar canais..."
+            }
+            value={pesquisa}
+            onChange={(e) => setPesquisa(e.target.value)}
+          />
+
+          <div className="filtros">
+            {categorias.map((categoria) => (
+              <button
+                key={categoria}
+                className={`filtro ${categoriaAtiva === categoria ? "ativo" : ""}`}
+                onClick={() => setCategoriaAtiva(categoria)}
+              >
+                {categoria}
+              </button>
+            ))}
+          </div>
+
+          {area === "canais" && canalAtual && (
+            <section className="player-canal">
+              <div className="player-cabecalho">
+                <h3>📺 {canalAtual.nome}</h3>
+
+                <button onClick={() => setCanalAtual(null)}>
+                  Fechar player ✕
+                </button>
+              </div>
+
+              {urlValida(canalAtual.link) ? (
+                <div>
+                  <p>
+                    Para acessar este canal, abra a página da fonte autorizada:
+                  </p>
+
+                  <a
+                    href={canalAtual.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Abrir canal em nova página ↗
+                  </a>
+                </div>
+              ) : (
+                <p>O endereço deste canal não é válido.</p>
+              )}
+
+              <p className="player-aviso">
+                A reprodução depende da compatibilidade e da autorização da fonte.
+              </p>
+            </section>
+          )}
+
+          <div className="grade">
+            {filtrados.map((p) => (
+              <article className="card" key={p.id}>
+                <div className="capa">
+                  {p.imagem ? (
+                    <img
+                      className="capa-imagem"
+                      src={p.imagem}
+                      alt={p.nome}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="azul">
+                      {area === "downloads" ? "📦" : "📺"}
+                    </span>
                   )}
                 </div>
-              </div>
-            </article>
-          ))}
-        </div>
 
-        {filtrados.length === 0 && (
-          <p className="vazio">
-            Nenhum {area === "downloads" ? "download" : "canal"} encontrado.
-          </p>
-        )}
-      </main>
+                <div className="card-info">
+                  <span className="etiqueta">{p.categoria}</span>
+                  <h3>{p.nome}</h3>
+                  <p>{p.descricao}</p>
+
+                  <div className="card-rodape">
+                    <span>
+                      {area === "downloads" ? p.plataforma : "Canal"}
+                    </span>
+
+                    {area === "downloads" ? (
+                      <a
+                        href={p.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Baixar ↗
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCanalAtual(p);
+
+                          setTimeout(() => {
+                            document.querySelector(".player-canal")?.scrollIntoView({
+                              behavior: "smooth"
+                            });
+                          }, 100);
+                        }}
+                      >
+                        Abrir canal ↗
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {filtrados.length === 0 && (
+            <p className="vazio">
+              Nenhum {area === "downloads" ? "download" : "canal"} encontrado.
+            </p>
+          )}
+        </main>
+      )}
 
       <footer className="sobre">
         <p>
