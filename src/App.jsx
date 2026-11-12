@@ -136,6 +136,7 @@ function Home() {
   const [carregandoJogos, setCarregandoJogos] = useState(false);
   const [erroJogos, setErroJogos] = useState("");
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("");
+  const [usouCache, setUsouCache] = useState(null);
 
   const [transmissoes, setTransmissoes] = useState([]);
   const [jogoSelecionadoId, setJogoSelecionadoId] = useState("");
@@ -233,14 +234,23 @@ function Home() {
       );
 
       if (error) {
-        throw new Error(error.message || "Não foi possível consultar a função.");
+        throw new Error(
+          error.message || "Não foi possível consultar a função."
+        );
       }
 
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       if (!Array.isArray(data?.data)) {
-        throw new Error("A API não retornou uma lista válida de partidas.");
+        throw new Error(
+          "A API não retornou uma lista válida de partidas."
+        );
       }
+
+      // Identifica se a resposta veio do cache do Supabase.
+      setUsouCache(data.cache === true);
 
       const jogosPermitidos = data.data
         .filter((jogo) =>
@@ -259,10 +269,12 @@ function Home() {
 
       setJogos(jogosPermitidos);
 
-      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit"
-      }));
+      setUltimaAtualizacao(
+        new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+      );
     } catch (error) {
       setErroJogos(error.message || "Erro ao consultar os jogos.");
     } finally {
@@ -495,7 +507,10 @@ function Home() {
     setMensagem("Salvando download...");
 
     try {
-      const imagem = await enviarImagem("downloads", novoProduto.imagem);
+      const imagem = await enviarImagem(
+        "downloads",
+        novoProduto.imagem
+      );
 
       const dados = {
         title: novoProduto.nome.trim(),
@@ -508,12 +523,22 @@ function Home() {
       };
 
       const resultado = editandoDownloadId
-        ? await supabase.from("downloads").update(dados).eq("id", editandoDownloadId)
-        : await supabase.from("downloads").insert([dados]);
+        ? await supabase
+            .from("downloads")
+            .update(dados)
+            .eq("id", editandoDownloadId)
+        : await supabase
+            .from("downloads")
+            .insert([dados]);
 
       if (resultado.error) throw resultado.error;
 
-      setMensagem(editandoDownloadId ? "Download atualizado!" : "Download cadastrado!");
+      setMensagem(
+        editandoDownloadId
+          ? "Download atualizado!"
+          : "Download cadastrado!"
+      );
+
       cancelarEdicao();
       await carregarProdutos();
     } catch (error) {
@@ -533,7 +558,10 @@ function Home() {
       return;
     }
 
-    if (novoCanal.logo_url.trim() && !urlValida(novoCanal.logo_url)) {
+    if (
+      novoCanal.logo_url.trim() &&
+      !urlValida(novoCanal.logo_url)
+    ) {
       setMensagem("O endereço do logotipo não é válido.");
       return;
     }
@@ -542,7 +570,10 @@ function Home() {
     setMensagem("Salvando canal...");
 
     try {
-      const imagem = await enviarImagem("canais", novoCanal.logo_url);
+      const imagem = await enviarImagem(
+        "canais",
+        novoCanal.logo_url
+      );
 
       const dados = {
         nome: novoCanal.nome.trim(),
@@ -553,12 +584,22 @@ function Home() {
       };
 
       const resultado = editandoCanalId
-        ? await supabase.from("canais").update(dados).eq("id", editandoCanalId)
-        : await supabase.from("canais").insert([dados]);
+        ? await supabase
+            .from("canais")
+            .update(dados)
+            .eq("id", editandoCanalId)
+        : await supabase
+            .from("canais")
+            .insert([dados]);
 
       if (resultado.error) throw resultado.error;
 
-      setMensagem(editandoCanalId ? "Canal atualizado!" : "Canal cadastrado!");
+      setMensagem(
+        editandoCanalId
+          ? "Canal atualizado!"
+          : "Canal cadastrado!"
+      );
+
       cancelarEdicao();
       await carregarCanais();
     } catch (error) {
@@ -580,7 +621,9 @@ function Home() {
 
   function alternarCanalTransmissao(canal) {
     setCanaisSelecionados((atuais) => {
-      const existe = atuais.some((item) => item.nome === canal.nome);
+      const existe = atuais.some(
+        (item) => item.nome === canal.nome
+      );
 
       return existe
         ? atuais.filter((item) => item.nome !== canal.nome)
@@ -592,7 +635,8 @@ function Home() {
     if (!adminAutorizado || salvando) return;
 
     const jogo = jogos.find(
-      (item) => String(item.fixture?.id) === String(jogoSelecionadoId)
+      (item) =>
+        String(item.fixture?.id) === String(jogoSelecionadoId)
     );
 
     if (!jogo) {
@@ -636,7 +680,11 @@ function Home() {
   async function excluirTransmissao(id) {
     if (!adminAutorizado) return;
 
-    if (!window.confirm("Deseja remover os canais desta partida?")) return;
+    if (
+      !window.confirm(
+        "Deseja remover os canais desta partida?"
+      )
+    ) return;
 
     const { error } = await supabase
       .from("transmissoes_jogos")
@@ -667,18 +715,24 @@ function Home() {
     });
 
     if (error) {
-      setMensagem("Não foi possível entrar. Confira e-mail e senha.");
+      setMensagem(
+        "Não foi possível entrar. Confira e-mail e senha."
+      );
       return;
     }
 
     setSession(data.session);
 
-    const autorizado = await verificarAdmin(data.session.user.id);
+    const autorizado = await verificarAdmin(
+      data.session.user.id
+    );
 
     if (!autorizado) {
       await supabase.auth.signOut();
       setSession(null);
-      setMensagem("Esta conta não está autorizada como administradora.");
+      setMensagem(
+        "Esta conta não está autorizada como administradora."
+      );
       return;
     }
 
@@ -696,9 +750,13 @@ function Home() {
 
   async function excluirDownload(id) {
     if (!adminAutorizado) return;
+
     if (!window.confirm("Deseja excluir este download?")) return;
 
-    const { error } = await supabase.from("downloads").delete().eq("id", id);
+    const { error } = await supabase
+      .from("downloads")
+      .delete()
+      .eq("id", id);
 
     if (error) {
       setMensagem("Erro ao excluir: " + error.message);
@@ -711,9 +769,13 @@ function Home() {
 
   async function excluirCanal(id) {
     if (!adminAutorizado) return;
+
     if (!window.confirm("Deseja excluir este canal?")) return;
 
-    const { error } = await supabase.from("canais").delete().eq("id", id);
+    const { error } = await supabase
+      .from("canais")
+      .delete()
+      .eq("id", id);
 
     if (error) {
       setMensagem("Erro ao excluir: " + error.message);
@@ -743,7 +805,8 @@ function Home() {
       item.descricao.toLowerCase().includes(termo);
 
     const correspondeCategoria =
-      categoriaAtiva === "Todos" || item.categoria === categoriaAtiva;
+      categoriaAtiva === "Todos" ||
+      item.categoria === categoriaAtiva;
 
     return correspondePesquisa && correspondeCategoria;
   });
@@ -780,7 +843,9 @@ function Home() {
           className="admin-botao"
           onClick={() => setPainelAberto(!painelAberto)}
         >
-          {painelAberto ? "Fechar painel" : "Área do Administrador"}
+          {painelAberto
+            ? "Fechar painel"
+            : "Área do Administrador"}
         </button>
       </header>
 
@@ -796,7 +861,9 @@ function Home() {
         <div className="banner-texto">
           <span>SEU ESPAÇO DIGITAL</span>
           <h1>MANINHO DOWNLOADS</h1>
-          <p>Downloads, jogos, aplicativos, futebol e canais em um só lugar.</p>
+          <p>
+            Downloads, jogos, aplicativos, futebol e canais em um só lugar.
+          </p>
         </div>
       </section>
 
@@ -898,25 +965,35 @@ function Home() {
 
               {tipoAdmin === "downloads" ? (
                 <>
-                  <h3>{editandoDownloadId ? "✏️ Editar download" : "➕ Adicionar download"}</h3>
+                  <h3>
+                    {editandoDownloadId
+                      ? "✏️ Editar download"
+                      : "➕ Adicionar download"}
+                  </h3>
 
                   <form className="form-produto" onSubmit={salvarDownload}>
                     <input
                       placeholder="Nome do arquivo"
                       value={novoProduto.nome}
-                      onChange={(e) => atualizarProduto("nome", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("nome", e.target.value)
+                      }
                       required
                     />
 
                     <input
                       placeholder="Descrição"
                       value={novoProduto.descricao}
-                      onChange={(e) => atualizarProduto("descricao", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("descricao", e.target.value)
+                      }
                     />
 
                     <select
                       value={novoProduto.categoria}
-                      onChange={(e) => atualizarProduto("categoria", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("categoria", e.target.value)
+                      }
                     >
                       <option>Aplicativos</option>
                       <option>Programas</option>
@@ -928,25 +1005,33 @@ function Home() {
                     <input
                       placeholder="Plataforma"
                       value={novoProduto.plataforma}
-                      onChange={(e) => atualizarProduto("plataforma", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("plataforma", e.target.value)
+                      }
                     />
 
                     <input
                       placeholder="Ícone ou emoji"
                       value={novoProduto.icone}
-                      onChange={(e) => atualizarProduto("icone", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("icone", e.target.value)
+                      }
                     />
 
                     <input
                       type="url"
                       placeholder="Link para baixar"
                       value={novoProduto.link}
-                      onChange={(e) => atualizarProduto("link", e.target.value)}
+                      onChange={(e) =>
+                        atualizarProduto("link", e.target.value)
+                      }
                       required
                     />
 
                     <div className="campo-imagem">
-                      <label htmlFor="imagem-admin">🖼️ Escolher imagem</label>
+                      <label htmlFor="imagem-admin">
+                        🖼️ Escolher imagem
+                      </label>
 
                       <input
                         id="imagem-admin"
@@ -972,11 +1057,18 @@ function Home() {
                     </div>
 
                     <button type="submit" disabled={salvando}>
-                      {salvando ? "Salvando..." : "💾 Salvar download"}
+                      {salvando
+                        ? "Salvando..."
+                        : "💾 Salvar download"}
                     </button>
 
                     {(editandoDownloadId || imagemPreview) && (
-                      <button type="button" onClick={cancelarEdicao}>Cancelar</button>
+                      <button
+                        type="button"
+                        onClick={cancelarEdicao}
+                      >
+                        Cancelar
+                      </button>
                     )}
                   </form>
 
@@ -988,10 +1080,17 @@ function Home() {
                         <span>{p.icone} {p.nome}</span>
 
                         <div className="admin-acoes">
-                          <button className="botao-editar" onClick={() => iniciarEdicaoDownload(p)}>
+                          <button
+                            className="botao-editar"
+                            onClick={() => iniciarEdicaoDownload(p)}
+                          >
                             ✏️ Editar
                           </button>
-                          <button className="botao-excluir" onClick={() => excluirDownload(p.id)}>
+
+                          <button
+                            className="botao-excluir"
+                            onClick={() => excluirDownload(p.id)}
+                          >
                             🗑️ Excluir
                           </button>
                         </div>
@@ -1001,25 +1100,35 @@ function Home() {
                 </>
               ) : tipoAdmin === "canais" ? (
                 <>
-                  <h3>{editandoCanalId ? "✏️ Editar canal" : "➕ Adicionar canal"}</h3>
+                  <h3>
+                    {editandoCanalId
+                      ? "✏️ Editar canal"
+                      : "➕ Adicionar canal"}
+                  </h3>
 
                   <form className="form-produto" onSubmit={salvarCanal}>
                     <input
                       placeholder="Nome do canal"
                       value={novoCanal.nome}
-                      onChange={(e) => atualizarCanal("nome", e.target.value)}
+                      onChange={(e) =>
+                        atualizarCanal("nome", e.target.value)
+                      }
                       required
                     />
 
                     <input
                       placeholder="Descrição do canal"
                       value={novoCanal.descricao}
-                      onChange={(e) => atualizarCanal("descricao", e.target.value)}
+                      onChange={(e) =>
+                        atualizarCanal("descricao", e.target.value)
+                      }
                     />
 
                     <select
                       value={novoCanal.categoria}
-                      onChange={(e) => atualizarCanal("categoria", e.target.value)}
+                      onChange={(e) =>
+                        atualizarCanal("categoria", e.target.value)
+                      }
                     >
                       <option>TV</option>
                       <option>Esportes</option>
@@ -1034,30 +1143,42 @@ function Home() {
                       type="url"
                       placeholder="Link do logotipo (opcional)"
                       value={novoCanal.logo_url}
-                      onChange={(e) => atualizarCanal("logo_url", e.target.value)}
+                      onChange={(e) =>
+                        atualizarCanal("logo_url", e.target.value)
+                      }
                     />
 
                     <input
                       type="url"
                       placeholder="Link do canal autorizado"
                       value={novoCanal.stream_url}
-                      onChange={(e) => atualizarCanal("stream_url", e.target.value)}
+                      onChange={(e) =>
+                        atualizarCanal("stream_url", e.target.value)
+                      }
                       required
                     />
 
                     <div className="campo-imagem">
-                      <label htmlFor="imagem-canal">🖼️ Enviar logotipo do computador</label>
+                      <label htmlFor="imagem-canal">
+                        🖼️ Enviar logotipo do computador
+                      </label>
+
                       <input
                         id="imagem-canal"
                         type="file"
                         accept="image/*"
                         onChange={escolherImagem}
                       />
+
                       <small>Imagem de até 5 MB.</small>
 
                       {imagemPreview && (
                         <div className="imagem-preview">
-                          <img src={imagemPreview} alt="Prévia do logotipo" />
+                          <img
+                            src={imagemPreview}
+                            alt="Prévia do logotipo"
+                          />
+
                           <button
                             type="button"
                             onClick={() => {
@@ -1072,11 +1193,18 @@ function Home() {
                     </div>
 
                     <button type="submit" disabled={salvando}>
-                      {salvando ? "Salvando..." : "💾 Salvar canal"}
+                      {salvando
+                        ? "Salvando..."
+                        : "💾 Salvar canal"}
                     </button>
 
                     {(editandoCanalId || imagemPreview) && (
-                      <button type="button" onClick={cancelarEdicao}>Cancelar</button>
+                      <button
+                        type="button"
+                        onClick={cancelarEdicao}
+                      >
+                        Cancelar
+                      </button>
                     )}
                   </form>
 
@@ -1088,10 +1216,17 @@ function Home() {
                         <span>📺 {c.nome}</span>
 
                         <div className="admin-acoes">
-                          <button className="botao-editar" onClick={() => iniciarEdicaoCanal(c)}>
+                          <button
+                            className="botao-editar"
+                            onClick={() => iniciarEdicaoCanal(c)}
+                          >
                             ✏️ Editar
                           </button>
-                          <button className="botao-excluir" onClick={() => excluirCanal(c.id)}>
+
+                          <button
+                            className="botao-excluir"
+                            onClick={() => excluirCanal(c.id)}
+                          >
                             🗑️ Excluir
                           </button>
                         </div>
@@ -1110,12 +1245,17 @@ function Home() {
                   <div className="form-produto">
                     <select
                       value={jogoSelecionadoId}
-                      onChange={(e) => selecionarJogoTransmissao(e.target.value)}
+                      onChange={(e) =>
+                        selecionarJogoTransmissao(e.target.value)
+                      }
                     >
                       <option value="">Selecione uma partida</option>
 
                       {jogos.map((jogo) => (
-                        <option key={jogo.fixture?.id} value={jogo.fixture?.id}>
+                        <option
+                          key={jogo.fixture?.id}
+                          value={jogo.fixture?.id}
+                        >
                           {jogo.teams?.home?.name} x {jogo.teams?.away?.name}
                         </option>
                       ))}
@@ -1127,12 +1267,20 @@ function Home() {
 
                         <div className="admin-lista">
                           {canaisEsportivos.map((canal) => (
-                            <label key={canal.nome} className="admin-item" style={{ cursor: "pointer" }}>
+                            <label
+                              key={canal.nome}
+                              className="admin-item"
+                              style={{ cursor: "pointer" }}
+                            >
                               <span>
                                 <input
                                   type="checkbox"
-                                  checked={canaisSelecionados.some((item) => item.nome === canal.nome)}
-                                  onChange={() => alternarCanalTransmissao(canal)}
+                                  checked={canaisSelecionados.some(
+                                    (item) => item.nome === canal.nome
+                                  )}
+                                  onChange={() =>
+                                    alternarCanalTransmissao(canal)
+                                  }
                                 />
                                 {" "}{canal.nome}
                               </span>
@@ -1140,8 +1288,14 @@ function Home() {
                           ))}
                         </div>
 
-                        <button type="button" onClick={salvarTransmissao} disabled={salvando}>
-                          {salvando ? "Salvando..." : "💾 Salvar canais da partida"}
+                        <button
+                          type="button"
+                          onClick={salvarTransmissao}
+                          disabled={salvando}
+                        >
+                          {salvando
+                            ? "Salvando..."
+                            : "💾 Salvar canais da partida"}
                         </button>
                       </>
                     )}
@@ -1151,12 +1305,20 @@ function Home() {
 
                   <div className="admin-lista">
                     {transmissoes.map((item) => (
-                      <div className="admin-item" key={item.fixture_id}>
-                        <span>⚽ {item.mandante} x {item.visitante}</span>
+                      <div
+                        className="admin-item"
+                        key={item.fixture_id}
+                      >
+                        <span>
+                          ⚽ {item.mandante} x {item.visitante}
+                        </span>
+
                         <button
                           className="botao-excluir"
                           type="button"
-                          onClick={() => excluirTransmissao(item.fixture_id)}
+                          onClick={() =>
+                            excluirTransmissao(item.fixture_id)
+                          }
                         >
                           🗑️ Remover
                         </button>
@@ -1164,7 +1326,9 @@ function Home() {
                     ))}
 
                     {transmissoes.length === 0 && (
-                      <p className="vazio">Nenhuma associação cadastrada.</p>
+                      <p className="vazio">
+                        Nenhuma associação cadastrada.
+                      </p>
                     )}
                   </div>
                 </>
@@ -1172,7 +1336,9 @@ function Home() {
             </>
           )}
 
-          {mensagem && <p className="aviso-admin">{mensagem}</p>}
+          {mensagem && (
+            <p className="aviso-admin">{mensagem}</p>
+          )}
         </section>
       )}
 
@@ -1181,72 +1347,141 @@ function Home() {
           <h2 className="titulo-secao">⚽ Futebol de hoje</h2>
 
           <p className="contador">
-            Partidas de {new Date(`${dataHoje()}T12:00:00`).toLocaleDateString("pt-BR")}
+            Partidas de{" "}
+            {new Date(`${dataHoje()}T12:00:00`).toLocaleDateString("pt-BR")}
           </p>
 
-          <button type="button" onClick={carregarJogos} disabled={carregandoJogos}>
-            {carregandoJogos ? "Consultando jogos..." : "🔄 Atualizar partidas"}
+          <button
+            type="button"
+            onClick={carregarJogos}
+            disabled={carregandoJogos}
+          >
+            {carregandoJogos
+              ? "Consultando jogos..."
+              : "🔄 Atualizar partidas"}
           </button>
 
           {ultimaAtualizacao && (
-            <p className="contador">Última consulta: {ultimaAtualizacao}</p>
+            <p className="contador">
+              Última consulta: {ultimaAtualizacao}
+            </p>
           )}
 
-          {erroJogos && <p className="vazio">⚠️ {erroJogos}</p>}
-
-          {carregandoJogos && <p className="vazio">Buscando partidas do dia...</p>}
-
-          {!carregandoJogos && !erroJogos && jogos.length === 0 && (
-            <p className="vazio">Nenhuma partida encontrada para hoje.</p>
+          {usouCache !== null && (
+            <p className="contador">
+              {usouCache
+                ? "♻️ Jogos carregados do cache — sem nova consulta à API."
+                : "⚡ Jogos atualizados pela API e salvos no cache."}
+            </p>
           )}
+
+          {erroJogos && (
+            <p className="vazio">⚠️ {erroJogos}</p>
+          )}
+
+          {carregandoJogos && (
+            <p className="vazio">
+              Buscando partidas do dia...
+            </p>
+          )}
+
+          {!carregandoJogos &&
+            !erroJogos &&
+            jogos.length === 0 && (
+              <p className="vazio">
+                Nenhuma partida encontrada para hoje.
+              </p>
+            )}
 
           <div className="grade">
             {jogos.map((jogo) => {
-              const canaisDoJogo = canaisDaPartida(jogo.fixture?.id);
+              const canaisDoJogo = canaisDaPartida(
+                jogo.fixture?.id
+              );
 
               return (
-                <article className="card" key={jogo.fixture?.id}>
+                <article
+                  className="card"
+                  key={jogo.fixture?.id}
+                >
                   <div className="card-info">
-                    <span className="etiqueta">{jogo.league?.name || "Campeonato"}</span>
+                    <span className="etiqueta">
+                      {jogo.league?.name || "Campeonato"}
+                    </span>
+
                     <p>{jogo.league?.country || ""}</p>
 
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "10px",
-                      margin: "18px 0"
-                    }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        margin: "18px 0"
+                      }}
+                    >
                       <div style={{ textAlign: "center", flex: 1 }}>
                         {jogo.teams?.home?.logo && (
-                          <img src={jogo.teams.home.logo} alt="" loading="lazy" style={{
-                            width: "48px",
-                            height: "48px",
-                            objectFit: "contain"
-                          }} />
+                          <img
+                            src={jogo.teams.home.logo}
+                            alt=""
+                            loading="lazy"
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              objectFit: "contain"
+                            }}
+                          />
                         )}
-                        <h3>{jogo.teams?.home?.name || "Time da casa"}</h3>
+
+                        <h3>
+                          {jogo.teams?.home?.name || "Time da casa"}
+                        </h3>
                       </div>
 
-                      <div style={{ textAlign: "center", minWidth: "55px" }}>
-                        <strong>{jogo.goals?.home ?? "-"} x {jogo.goals?.away ?? "-"}</strong>
+                      <div
+                        style={{
+                          textAlign: "center",
+                          minWidth: "55px"
+                        }}
+                      >
+                        <strong>
+                          {jogo.goals?.home ?? "-"} x{" "}
+                          {jogo.goals?.away ?? "-"}
+                        </strong>
+
                         <p>{horarioPartida(jogo.fixture?.date)}</p>
                       </div>
 
                       <div style={{ textAlign: "center", flex: 1 }}>
                         {jogo.teams?.away?.logo && (
-                          <img src={jogo.teams.away.logo} alt="" loading="lazy" style={{
-                            width: "48px",
-                            height: "48px",
-                            objectFit: "contain"
-                          }} />
+                          <img
+                            src={jogo.teams.away.logo}
+                            alt=""
+                            loading="lazy"
+                            style={{
+                              width: "48px",
+                              height: "48px",
+                              objectFit: "contain"
+                            }}
+                          />
                         )}
-                        <h3>{jogo.teams?.away?.name || "Time visitante"}</h3>
+
+                        <h3>
+                          {jogo.teams?.away?.name || "Time visitante"}
+                        </h3>
                       </div>
                     </div>
 
-                    <p>Status: {statusPartida(jogo.fixture?.status?.short)}</p>
-                    <p>Estádio: {jogo.fixture?.venue?.name || "Não informado"}</p>
+                    <p>
+                      Status:{" "}
+                      {statusPartida(jogo.fixture?.status?.short)}
+                    </p>
+
+                    <p>
+                      Estádio:{" "}
+                      {jogo.fixture?.venue?.name || "Não informado"}
+                    </p>
 
                     <div style={{ marginTop: "15px" }}>
                       <h3>📺 Onde assistir</h3>
@@ -1256,7 +1491,10 @@ function Home() {
                           {canaisDoJogo.map((canal) => (
                             <BotoesConteudo
                               key={canal.nome}
-                              item={{ nome: canal.nome, link: canal.url }}
+                              item={{
+                                nome: canal.nome,
+                                link: canal.url
+                              }}
                               aoAbrirPlayer={abrirNoPlayer}
                               textoPlayer="Assistir"
                               textoNovaAba="Nova aba"
@@ -1264,7 +1502,9 @@ function Home() {
                           ))}
                         </div>
                       ) : (
-                        <p className="contador">Transmissão ainda não cadastrada.</p>
+                        <p className="contador">
+                          Transmissão ainda não cadastrada.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1274,7 +1514,10 @@ function Home() {
           </div>
 
           <section style={{ marginTop: "35px" }}>
-            <h2 className="titulo-secao">📺 Canais esportivos</h2>
+            <h2 className="titulo-secao">
+              📺 Canais esportivos
+            </h2>
+
             <p className="contador">
               Consulte a programação oficial para confirmar a transmissão de cada partida.
             </p>
@@ -1287,7 +1530,10 @@ function Home() {
                     <h3>{canal.nome}</h3>
 
                     <BotoesConteudo
-                      item={{ nome: canal.nome, link: canal.url }}
+                      item={{
+                        nome: canal.nome,
+                        link: canal.url
+                      }}
                       aoAbrirPlayer={abrirNoPlayer}
                       textoPlayer="Assistir no site"
                       textoNovaAba="Nova aba"
@@ -1301,16 +1547,23 @@ function Home() {
       ) : (
         <main className="catalogo">
           <h2 className="titulo-secao">
-            {area === "downloads" ? "Explore nossos downloads" : "Canais cadastrados"}
+            {area === "downloads"
+              ? "Explore nossos downloads"
+              : "Canais cadastrados"}
           </h2>
 
           <p className="contador">
-            {filtrados.length} {area === "downloads" ? "downloads" : "canais"} disponíveis
+            {filtrados.length}{" "}
+            {area === "downloads" ? "downloads" : "canais"} disponíveis
           </p>
 
           <input
             className="pesquisa"
-            placeholder={area === "downloads" ? "🔎 Pesquisar downloads..." : "🔎 Pesquisar canais..."}
+            placeholder={
+              area === "downloads"
+                ? "🔎 Pesquisar downloads..."
+                : "🔎 Pesquisar canais..."
+            }
             value={pesquisa}
             onChange={(e) => setPesquisa(e.target.value)}
           />
@@ -1319,7 +1572,9 @@ function Home() {
             {categorias.map((categoria) => (
               <button
                 key={categoria}
-                className={`filtro ${categoriaAtiva === categoria ? "ativo" : ""}`}
+                className={`filtro ${
+                  categoriaAtiva === categoria ? "ativo" : ""
+                }`}
                 onClick={() => setCategoriaAtiva(categoria)}
               >
                 {categoria}
@@ -1332,9 +1587,16 @@ function Home() {
               <article className="card" key={p.id}>
                 <div className="capa">
                   {p.imagem ? (
-                    <img className="capa-imagem" src={p.imagem} alt={p.nome} loading="lazy" />
+                    <img
+                      className="capa-imagem"
+                      src={p.imagem}
+                      alt={p.nome}
+                      loading="lazy"
+                    />
                   ) : (
-                    <span className="azul">{area === "downloads" ? "📦" : "📺"}</span>
+                    <span className="azul">
+                      {area === "downloads" ? "📦" : "📺"}
+                    </span>
                   )}
                 </div>
 
@@ -1344,14 +1606,27 @@ function Home() {
                   <p>{p.descricao}</p>
 
                   <div className="card-rodape">
-                    <span>{area === "downloads" ? p.plataforma : "Canal"}</span>
+                    <span>
+                      {area === "downloads" ? p.plataforma : "Canal"}
+                    </span>
                   </div>
 
                   <BotoesConteudo
-                    item={{ nome: p.nome, link: p.link }}
+                    item={{
+                      nome: p.nome,
+                      link: p.link
+                    }}
                     aoAbrirPlayer={abrirNoPlayer}
-                    textoPlayer={area === "downloads" ? "Abrir no player" : "Assistir no site"}
-                    textoNovaAba={area === "downloads" ? "Baixar / nova aba" : "Nova aba"}
+                    textoPlayer={
+                      area === "downloads"
+                        ? "Abrir no player"
+                        : "Assistir no site"
+                    }
+                    textoNovaAba={
+                      area === "downloads"
+                        ? "Baixar / nova aba"
+                        : "Nova aba"
+                    }
                   />
                 </div>
               </article>
@@ -1360,7 +1635,8 @@ function Home() {
 
           {filtrados.length === 0 && (
             <p className="vazio">
-              Nenhum {area === "downloads" ? "download" : "canal"} encontrado.
+              Nenhum{" "}
+              {area === "downloads" ? "download" : "canal"} encontrado.
             </p>
           )}
         </main>
@@ -1380,7 +1656,10 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/assistir" element={<Player />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="*"
+        element={<Navigate to="/" replace />}
+      />
     </Routes>
   );
 }
