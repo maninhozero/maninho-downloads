@@ -827,3 +827,52 @@ button {
     flex-direction: column;
   }
 }
+
+/* BOTÕES DO PLAYER NOS CARDS */
+
+.acoes-conteudo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.botao-player-card,
+.botao-nova-aba {
+  flex: 1;
+  min-width: 115px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 8px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(90deg, #7028d8, #2563eb);
+}
+
+.botao-nova-aba {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #252d3a;
+}
+
+.botao-player-card:hover,
+.botao-nova-aba:hover {
+  filter: brightness(1.2);
+}
+
+@media (max-width: 480px) {
+  .acoes-conteudo {
+    flex-direction: column;
+  }
+
+  .botao-player-card,
+  .botao-nova-aba {
+    width: 100%;
+  }
+}

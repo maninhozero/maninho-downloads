@@ -1,6 +1,11 @@
 
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useNavigate
+} from "react-router-dom";
 import { supabase } from "./supabase";
 import Player from "./Player.jsx";
 import "./App.css";
@@ -98,7 +103,32 @@ function statusPartida(status) {
   return estados[status] || status || "Status indisponível";
 }
 
+function BotoesConteudo({ item, aoAbrirPlayer, textoPlayer, textoNovaAba }) {
+  return (
+    <div className="acoes-conteudo">
+      <button
+        type="button"
+        className="botao-player-card"
+        onClick={() => aoAbrirPlayer(item)}
+      >
+        ▶ {textoPlayer || "Abrir no site"}
+      </button>
+
+      <a
+        className="botao-nova-aba"
+        href={item.link}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        ↗ {textoNovaAba || "Abrir em nova aba"}
+      </a>
+    </div>
+  );
+}
+
 function Home() {
+  const navegar = useNavigate();
+
   const [produtos, setProdutos] = useState([]);
   const [canais, setCanais] = useState([]);
 
@@ -135,7 +165,18 @@ function Home() {
   const [imagemPreview, setImagemPreview] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  const [canalAtual, setCanalAtual] = useState(null);
+  function abrirNoPlayer(item) {
+    if (!item?.link || !urlValida(item.link)) {
+      alert("Este conteúdo não possui um endereço válido.");
+      return;
+    }
+
+    const destino =
+      `/assistir?url=${encodeURIComponent(item.link)}` +
+      `&titulo=${encodeURIComponent(item.nome || "Conteúdo")}`;
+
+    navegar(destino);
+  }
 
   async function carregarProdutos() {
     const { data, error } = await supabase
@@ -679,8 +720,6 @@ function Home() {
       return;
     }
 
-    if (canalAtual?.id === id) setCanalAtual(null);
-
     setMensagem("Canal excluído!");
     await carregarCanais();
   }
@@ -713,7 +752,6 @@ function Home() {
     setArea(novaArea);
     setCategoriaAtiva("Todos");
     setPesquisa("");
-    setCanalAtual(null);
   }
 
   function canaisDaPartida(fixtureId) {
@@ -1214,11 +1252,15 @@ function Home() {
                       <h3>📺 Onde assistir</h3>
 
                       {canaisDoJogo.length > 0 ? (
-                        <div className="admin-acoes">
+                        <div className="acoes-conteudo">
                           {canaisDoJogo.map((canal) => (
-                            <a key={canal.nome} href={canal.url} target="_blank" rel="noopener noreferrer">
-                              {canal.nome} ↗
-                            </a>
+                            <BotoesConteudo
+                              key={canal.nome}
+                              item={{ nome: canal.nome, link: canal.url }}
+                              aoAbrirPlayer={abrirNoPlayer}
+                              textoPlayer="Assistir"
+                              textoNovaAba="Nova aba"
+                            />
                           ))}
                         </div>
                       ) : (
@@ -1244,12 +1286,12 @@ function Home() {
                     <span className="etiqueta">Esportes</span>
                     <h3>{canal.nome}</h3>
 
-                    <div className="card-rodape">
-                      <span>Canal</span>
-                      <a href={canal.url} target="_blank" rel="noopener noreferrer">
-                        Abrir página ↗
-                      </a>
-                    </div>
+                    <BotoesConteudo
+                      item={{ nome: canal.nome, link: canal.url }}
+                      aoAbrirPlayer={abrirNoPlayer}
+                      textoPlayer="Assistir no site"
+                      textoNovaAba="Nova aba"
+                    />
                   </div>
                 </article>
               ))}
@@ -1285,30 +1327,6 @@ function Home() {
             ))}
           </div>
 
-          {area === "canais" && canalAtual && (
-            <section className="player-canal">
-              <div className="player-cabecalho">
-                <h3>📺 {canalAtual.nome}</h3>
-                <button onClick={() => setCanalAtual(null)}>Fechar player ✕</button>
-              </div>
-
-              {urlValida(canalAtual.link) ? (
-                <div>
-                  <p>Para acessar este canal, abra a página da fonte autorizada:</p>
-                  <a href={canalAtual.link} target="_blank" rel="noopener noreferrer">
-                    Abrir canal em nova página ↗
-                  </a>
-                </div>
-              ) : (
-                <p>O endereço deste canal não é válido.</p>
-              )}
-
-              <p className="player-aviso">
-                A reprodução depende da compatibilidade e da autorização da fonte.
-              </p>
-            </section>
-          )}
-
           <div className="grade">
             {filtrados.map((p) => (
               <article className="card" key={p.id}>
@@ -1327,27 +1345,14 @@ function Home() {
 
                   <div className="card-rodape">
                     <span>{area === "downloads" ? p.plataforma : "Canal"}</span>
-
-                    {area === "downloads" ? (
-                      <a href={p.link} target="_blank" rel="noopener noreferrer">
-                        Baixar ↗
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCanalAtual(p);
-                          setTimeout(() => {
-                            document.querySelector(".player-canal")?.scrollIntoView({
-                              behavior: "smooth"
-                            });
-                          }, 100);
-                        }}
-                      >
-                        Abrir canal ↗
-                      </button>
-                    )}
                   </div>
+
+                  <BotoesConteudo
+                    item={{ nome: p.nome, link: p.link }}
+                    aoAbrirPlayer={abrirNoPlayer}
+                    textoPlayer={area === "downloads" ? "Abrir no player" : "Assistir no site"}
+                    textoNovaAba={area === "downloads" ? "Baixar / nova aba" : "Nova aba"}
+                  />
                 </div>
               </article>
             ))}
